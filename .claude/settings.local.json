@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-expo-app@latest . --template blank-typescript)",
+      "Bash(npx create-expo-app@latest . --template blank-typescript --yes)",
+      "Bash(mkdir -p c:/Users/KEVIN/tmp-expo)",
+      "Read(//c/Users/KEVIN/**)",
+      "Bash(npx create-expo-app@latest ConvertisseurDevises --template blank-typescript)",
+      "Bash(npx expo:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:www.figma.com)",
+      "WebFetch(domain:frankfurter.dev)",
+      "WebSearch",
+      "Bash(npm start:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :8081)"
+    ]
+  }
+}
