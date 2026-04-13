@@ -182,6 +182,9 @@ export default function ConverterScreen() {
   const [alertVisible,    setAlertVisible]    = useState(false);
   const [notifyTarget,    setNotifyTarget]    = useState<Currency | null>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [confirmVisible,  setConfirmVisible]  = useState(false);
+  const [exchangeDone,    setExchangeDone]    = useState(false);
+  const [exchangeErr,     setExchangeErr]     = useState<string | null>(null);
 
   const numFrom = parseFloat(fromAmount.replace(",", ".")) || 0;
   const numTo   = rate !== null ? numFrom * rate : null;
@@ -248,6 +251,24 @@ export default function ConverterScreen() {
       : null;
   const graphIsUp  = (graphTrend ?? 0) >= 0;
   const graphColor = graphIsUp ? GREEN : RED;
+
+  const handleExchangePress = () => {
+    if (numFrom <= 0)     { setExchangeErr(t.exchangeErrZero);    return; }
+    if (rate === null)    { setExchangeErr(t.exchangeErrNoRate);   return; }
+    setExchangeErr(null);
+    setExchangeDone(false);
+    setConfirmVisible(true);
+  };
+
+  const handleConfirm = () => {
+    setExchangeDone(true);
+    // Simule l'exécution de l'ordre
+    setTimeout(() => {
+      setConfirmVisible(false);
+      setExchangeDone(false);
+      setFromAmount("1");
+    }, 2000);
+  };
 
   // TradingView symbol — format: FX:EURUSD
   const tvSymbol = `FX:${fromCurrency.code}${toCurrency.code}`;
@@ -398,9 +419,15 @@ export default function ConverterScreen() {
         </TouchableOpacity>
 
         {/* ── Exchange ── */}
+        {exchangeErr && (
+          <View style={s.exchangeErrBanner}>
+            <Text style={s.exchangeErrText}>⚠️  {exchangeErr}</Text>
+          </View>
+        )}
         <TouchableOpacity
-          style={[s.exchangeBtn, { backgroundColor: primary, ...(mkShadow(primary, darkMode)) }]}
+          style={[s.exchangeBtn, { backgroundColor: primary, ...(mkShadow(primary, darkMode)), opacity: (numFrom <= 0 || rate === null) ? 0.5 : 1 }]}
           activeOpacity={0.85}
+          onPress={handleExchangePress}
         >
           <Text style={s.exchangeText}>{t.exchange}</Text>
         </TouchableOpacity>
@@ -584,6 +611,74 @@ export default function ConverterScreen() {
         </SafeAreaView>
       </Modal>
 
+      {/* ══ Confirmation échange ══ */}
+      <Modal visible={confirmVisible} animationType="fade" transparent>
+        <View style={s.confirmOverlay}>
+          <View style={[s.confirmCard, ds.sheet]}>
+
+            {!exchangeDone ? (
+              <>
+                <Text style={[s.confirmTitle, ds.text]}>{t.exchangeConfirmTitle}</Text>
+
+                {/* Résumé */}
+                <View style={[s.confirmSummary, { backgroundColor: theme.input }]}>
+                  <View style={s.confirmRow}>
+                    <Text style={s.confirmFlag}>{fromCurrency.flag}</Text>
+                    <Text style={[s.confirmAmount, ds.text]}>
+                      {fmtNum(numFrom)} {fromCurrency.code}
+                    </Text>
+                  </View>
+                  <Text style={[s.confirmArrow, { color: primary }]}>↓</Text>
+                  <View style={s.confirmRow}>
+                    <Text style={s.confirmFlag}>{toCurrency.flag}</Text>
+                    <Text style={[s.confirmAmount, { color: primary }]}>
+                      {numTo !== null ? fmtNum(numTo) : "—"} {toCurrency.code}
+                    </Text>
+                  </View>
+                </View>
+
+                {rate !== null && (
+                  <Text style={[s.confirmRate, ds.muted]}>
+                    {t.rateLabel(fromCurrency.code, rate.toFixed(4), toCurrency.code)}
+                  </Text>
+                )}
+
+                {/* Boutons */}
+                <View style={s.confirmBtns}>
+                  <TouchableOpacity
+                    style={[s.confirmBtn, { backgroundColor: theme.input }]}
+                    onPress={() => setConfirmVisible(false)}
+                  >
+                    <Text style={[s.confirmBtnText, ds.muted]}>{t.exchangeCancelBtn}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.confirmBtn, { backgroundColor: primary }]}
+                    onPress={handleConfirm}
+                  >
+                    <Text style={[s.confirmBtnText, { color: "#FFF" }]}>{t.exchangeConfirmBtn} ✓</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              /* ── Succès ── */
+              <View style={s.successBlock}>
+                <Text style={s.successEmoji}>✅</Text>
+                <Text style={[s.confirmTitle, ds.text, { textAlign: "center" }]}>
+                  {t.exchangeSuccessTitle}
+                </Text>
+                <Text style={[s.confirmRate, ds.muted, { textAlign: "center", marginTop: 6 }]}>
+                  {t.exchangeSuccessBody(
+                    `${fmtNum(numFrom)} ${fromCurrency.code}`,
+                    `${numTo !== null ? fmtNum(numTo) : "—"} ${toCurrency.code}`
+                  )}
+                </Text>
+              </View>
+            )}
+
+          </View>
+        </View>
+      </Modal>
+
       {/* ══ Alert ══ */}
       <Modal visible={alertVisible} animationType="fade" transparent>
         <Pressable style={s.alertOverlay} onPress={() => { setAlertVisible(false); setNotifyTarget(null); }}>
@@ -678,6 +773,24 @@ const s = StyleSheet.create({
   tvLoader:      { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", gap: 12 },
   tvLoaderText:  { fontSize: 14 },
   tvWebFallback: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 },
+
+  exchangeErrBanner: { backgroundColor: "#FF3B3015", borderRadius: 12, padding: 12, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: RED },
+  exchangeErrText:   { fontSize: 13, color: RED, fontWeight: "500" },
+
+  confirmOverlay:  { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 },
+  confirmCard:     { borderRadius: 24, padding: 24, width: "100%" },
+  confirmTitle:    { fontSize: 20, fontWeight: "700", marginBottom: 20 },
+  confirmSummary:  { borderRadius: 16, padding: 18, marginBottom: 14, gap: 8 },
+  confirmRow:      { flexDirection: "row", alignItems: "center", gap: 12 },
+  confirmFlag:     { fontSize: 28 },
+  confirmAmount:   { fontSize: 22, fontWeight: "700" },
+  confirmArrow:    { fontSize: 22, fontWeight: "700", textAlign: "center" },
+  confirmRate:     { fontSize: 13, marginBottom: 20 },
+  confirmBtns:     { flexDirection: "row", gap: 12 },
+  confirmBtn:      { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: "center" },
+  confirmBtnText:  { fontSize: 15, fontWeight: "700" },
+  successBlock:    { alignItems: "center", paddingVertical: 12, gap: 10 },
+  successEmoji:    { fontSize: 52 },
 
   alertOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 32 },
   alertCard:    { borderRadius: 22, padding: 26, width: "100%" },
