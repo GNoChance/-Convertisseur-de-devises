@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -16,7 +17,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
-import { WebView } from "react-native-webview";
+
+// WebView n'est pas disponible sur Expo Web
+const WebView = Platform.OS !== "web"
+  ? require("react-native-webview").WebView
+  : null;
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -529,25 +534,53 @@ export default function ConverterScreen() {
             )}
           </View>
 
-          {/* TradingView WebView */}
-          <WebView
-            style={s.tvWebView}
-            source={{ html: buildTVHtml(tvSymbol, darkMode, lang) }}
-            javaScriptEnabled
-            domStorageEnabled
-            originWhitelist={["*"]}
-            mixedContentMode="always"
-            scrollEnabled={false}
-            startInLoadingState
-            renderLoading={() => (
-              <View style={s.tvLoader}>
-                <ActivityIndicator color={primary} size="large" />
-                <Text style={[s.tvLoaderText, ds.muted]}>
-                  {lang === "fr" ? "Chargement du graphique…" : "Loading chart…"}
+          {/* TradingView WebView — natif uniquement */}
+          {WebView ? (
+            <WebView
+              style={s.tvWebView}
+              source={{ html: buildTVHtml(tvSymbol, darkMode, lang) }}
+              javaScriptEnabled
+              domStorageEnabled
+              originWhitelist={["*"]}
+              mixedContentMode="always"
+              scrollEnabled={false}
+              startInLoadingState
+              renderLoading={() => (
+                <View style={s.tvLoader}>
+                  <ActivityIndicator color={primary} size="large" />
+                  <Text style={[s.tvLoaderText, ds.muted]}>
+                    {lang === "fr" ? "Chargement du graphique…" : "Loading chart…"}
+                  </Text>
+                </View>
+              )}
+            />
+          ) : (
+            // Fallback Expo Web : bouton pour ouvrir dans le navigateur
+            <View style={s.tvWebFallback}>
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>📈</Text>
+              <Text style={[s.tvPair, ds.text, { marginBottom: 6, textAlign: "center" }]}>
+                {fromCurrency.code} / {toCurrency.code}
+              </Text>
+              {rate !== null && (
+                <Text style={[s.tvRate, { color: graphColor, marginBottom: 24, textAlign: "center" }]}>
+                  {fmtRate(rate)}
                 </Text>
-              </View>
-            )}
-          />
+              )}
+              <TouchableOpacity
+                style={[s.exchangeBtn, { backgroundColor: primary, paddingHorizontal: 36 }]}
+                onPress={() => Linking.openURL(`https://www.tradingview.com/symbols/${fromCurrency.code}${toCurrency.code}/`)}
+              >
+                <Text style={s.exchangeText}>
+                  {lang === "fr" ? "Ouvrir sur TradingView ↗" : "Open on TradingView ↗"}
+                </Text>
+              </TouchableOpacity>
+              <Text style={[s.tvLoaderText, ds.muted, { marginTop: 16, textAlign: "center" }]}>
+                {lang === "fr"
+                  ? "Le graphique interactif nécessite l'app mobile"
+                  : "Interactive chart requires the mobile app"}
+              </Text>
+            </View>
+          )}
         </SafeAreaView>
       </Modal>
 
@@ -641,9 +674,10 @@ const s = StyleSheet.create({
   tvRate:       { fontSize: 20, fontWeight: "800", marginTop: 1 },
   tvBadge:      { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginLeft: 8 },
   tvBadgeText:  { fontSize: 13, fontWeight: "700" },
-  tvWebView:    { flex: 1 },
-  tvLoader:     { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", gap: 12 },
-  tvLoaderText: { fontSize: 14 },
+  tvWebView:     { flex: 1 },
+  tvLoader:      { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", gap: 12 },
+  tvLoaderText:  { fontSize: 14 },
+  tvWebFallback: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 },
 
   alertOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 32 },
   alertCard:    { borderRadius: 22, padding: 26, width: "100%" },
