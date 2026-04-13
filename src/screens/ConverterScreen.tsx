@@ -1,10 +1,9 @@
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Modal,
-  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -13,11 +12,11 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
+import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
+import { WebView } from "react-native-webview";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -55,8 +54,6 @@ const CURRENCIES = [
 ];
 
 type Currency = (typeof CURRENCIES)[number];
-const PERIODS = ["1W", "1M", "3M", "6M", "1Y", "Max"] as const;
-type Period   = (typeof PERIODS)[number];
 
 const RED   = "#FF3B30";
 const GREEN = "#34C759";
@@ -75,13 +72,6 @@ function fmtRate(v: number): string {
   if (v >= 1)     return v.toFixed(4);
   return v.toFixed(5);
 }
-function fmtDateLabel(date: string): string {
-  if (!date) return "";
-  const parts = date.split("-");
-  if (parts.length !== 3) return date;
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${months[parseInt(parts[1]) - 1]} ${parseInt(parts[2])}`;
-}
 function mkShadow(color = "#000", dark = false): object {
   if (dark) return {};
   return Platform.select({
@@ -91,7 +81,7 @@ function mkShadow(color = "#000", dark = false): object {
   }) ?? {};
 }
 
-// ─── Mini graph (card preview) ────────────────────────────────────────────────
+// ─── Mini sparkline (card preview) ───────────────────────────────────────────
 
 function MiniGraph({ points, color, W = 110, H = 36 }: { points: number[]; color: string; W?: number; H?: number }) {
   if (points.length < 2) return null;
@@ -114,231 +104,50 @@ function MiniGraph({ points, color, W = 110, H = 36 }: { points: number[]; color
   );
 }
 
-// ─── TradingView-style chart ──────────────────────────────────────────────────
+// ─── TradingView HTML template ────────────────────────────────────────────────
 
-type TradingChartProps = {
-  points:  number[];
-  dates:   string[];
-  isUp:    boolean;
-  theme:   typeof import("../context/AppContext").LIGHT;
-  darkMode: boolean;
-};
-
-function TradingChart({ points, dates, isUp, theme, darkMode }: TradingChartProps) {
-  const { width: screenW } = useWindowDimensions();
-  const W     = Math.max(screenW - 40, 280);
-  const H     = 210;
-  const PL    = 56; // padding left (for Y labels)
-  const PR    = 10; // padding right
-  const PT    = 18; // padding top
-  const PB    = 34; // padding bottom (for X labels)
-  const iw    = W - PL - PR;
-  const ih    = H - PT - PB;
-
-  const [activeIdx, setActiveIdx] = useState<number | null>(null);
-
-  // Ref so PanResponder callbacks always see latest values
-  const ctxRef = useRef({ points, iw, PL });
-  ctxRef.current = { points, iw, PL };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: (e) => {
-        const { points: pts, iw: _iw, PL: _pl } = ctxRef.current;
-        if (pts.length < 2) return;
-        const relX = e.nativeEvent.locationX - _pl;
-        const idx  = Math.round((relX / _iw) * (pts.length - 1));
-        setActiveIdx(Math.max(0, Math.min(pts.length - 1, idx)));
-      },
-      onPanResponderMove: (e) => {
-        const { points: pts, iw: _iw, PL: _pl } = ctxRef.current;
-        if (pts.length < 2) return;
-        const relX = e.nativeEvent.locationX - _pl;
-        const idx  = Math.round((relX / _iw) * (pts.length - 1));
-        setActiveIdx(Math.max(0, Math.min(pts.length - 1, idx)));
-      },
-      onPanResponderRelease: () => {
-        setTimeout(() => setActiveIdx(null), 2500);
-      },
-    })
-  ).current;
-
-  if (points.length < 2) {
-    return <View style={{ height: H, justifyContent: "center", alignItems: "center" }} />;
-  }
-
-  const min   = Math.min(...points);
-  const max   = Math.max(...points);
-  const range = max - min || 0.00001;
-  const color = isUp ? GREEN : RED;
-
-  const toX = (i: number) => PL + (i / (points.length - 1)) * iw;
-  const toY = (v: number) => PT + ih - ((v - min) / range) * ih;
-
-  // SVG paths
-  const linePath = points.map((v, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
-  const areaPath = `${linePath} L${toX(points.length - 1).toFixed(1)},${(PT + ih).toFixed(1)} L${PL},${(PT + ih).toFixed(1)} Z`;
-
-  // Y-axis grid (5 horizontal lines)
-  const GRID_Y = 5;
-  const yLevels = Array.from({ length: GRID_Y }, (_, i) => {
-    const frac = i / (GRID_Y - 1);
-    const v    = min + frac * range;
-    return { v, y: toY(v) };
-  });
-
-  // X-axis labels (4 ticks)
-  const X_TICKS = 4;
-  const xTicks = Array.from({ length: X_TICKS }, (_, i) => {
-    const idx = Math.round((i / (X_TICKS - 1)) * (points.length - 1));
-    return { idx, x: toX(idx), label: fmtDateLabel(dates[idx] ?? "") };
-  });
-
-  // Crosshair state
-  const hasActive  = activeIdx !== null;
-  const aX         = hasActive ? toX(activeIdx!) : null;
-  const aY         = hasActive ? toY(points[activeIdx!]) : null;
-  const aVal       = hasActive ? points[activeIdx!] : null;
-  const aDate      = hasActive ? (dates[activeIdx!] ?? "") : "";
-
-  // Tooltip: flip to left side when near right edge
-  const TOOLTIP_W  = 120;
-  const TOOLTIP_H  = 34;
-  const tooltipX   = aX !== null ? (aX > W * 0.6 ? aX - TOOLTIP_W - 8 : aX + 8) : 0;
-  const tooltipY   = aY !== null ? Math.max(PT, aY - TOOLTIP_H - 4) : 0;
-
-  const gridStroke  = darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)";
-  const mutedFill   = theme.muted;
-  const gradId      = `tvg-${isUp ? "up" : "dn"}`;
-
-  return (
-    <View {...panResponder.panHandlers}>
-      <Svg width={W} height={H}>
-        <Defs>
-          <LinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0"   stopColor={color} stopOpacity="0.32" />
-            <Stop offset="0.6" stopColor={color} stopOpacity="0.08" />
-            <Stop offset="1"   stopColor={color} stopOpacity="0"    />
-          </LinearGradient>
-        </Defs>
-
-        {/* Y-axis grid lines + labels */}
-        {yLevels.map(({ v, y }, i) => (
-          <G key={`y${i}`}>
-            <Line
-              x1={PL} y1={y}
-              x2={W - PR} y2={y}
-              stroke={gridStroke}
-              strokeWidth="1"
-            />
-            <SvgText
-              x={PL - 5} y={y + 3.5}
-              textAnchor="end"
-              fontSize="9"
-              fill={mutedFill}
-            >
-              {fmtRate(v)}
-            </SvgText>
-          </G>
-        ))}
-
-        {/* Area fill */}
-        <Path d={areaPath} fill={`url(#${gradId})`} />
-
-        {/* Main line */}
-        <Path
-          d={linePath}
-          stroke={color}
-          strokeWidth="2.5"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Last price dot (pulse) — only when no crosshair */}
-        {!hasActive && (
-          <G>
-            <Circle
-              cx={toX(points.length - 1)}
-              cy={toY(points[points.length - 1])}
-              r="8"
-              fill={color}
-              opacity="0.18"
-            />
-            <Circle
-              cx={toX(points.length - 1)}
-              cy={toY(points[points.length - 1])}
-              r="4"
-              fill={color}
-            />
-          </G>
-        )}
-
-        {/* X-axis date labels */}
-        {xTicks.map(({ x, label }, i) => (
-          <SvgText
-            key={`x${i}`}
-            x={x} y={H - 6}
-            textAnchor={i === 0 ? "start" : i === X_TICKS - 1 ? "end" : "middle"}
-            fontSize="9.5"
-            fill={mutedFill}
-          >
-            {label}
-          </SvgText>
-        ))}
-
-        {/* ── Crosshair ── */}
-        {hasActive && aX !== null && aY !== null && aVal !== null && (
-          <G>
-            {/* Vertical dashed line */}
-            <Line
-              x1={aX} y1={PT}
-              x2={aX} y2={PT + ih}
-              stroke={color}
-              strokeWidth="1.5"
-              strokeDasharray="5,3"
-              opacity="0.75"
-            />
-            {/* Dot */}
-            <Circle cx={aX} cy={aY} r="10" fill={color} opacity="0.18" />
-            <Circle cx={aX} cy={aY} r="5"  fill={color} />
-            {/* Tooltip background */}
-            <Rect
-              x={tooltipX} y={tooltipY}
-              width={TOOLTIP_W} height={TOOLTIP_H}
-              rx="8"
-              fill={color}
-              opacity="0.93"
-            />
-            {/* Tooltip value */}
-            <SvgText
-              x={tooltipX + TOOLTIP_W / 2}
-              y={tooltipY + 13}
-              textAnchor="middle"
-              fontSize="12"
-              fontWeight="700"
-              fill="#FFF"
-            >
-              {fmtRate(aVal)}
-            </SvgText>
-            {/* Tooltip date */}
-            <SvgText
-              x={tooltipX + TOOLTIP_W / 2}
-              y={tooltipY + 27}
-              textAnchor="middle"
-              fontSize="9"
-              fill="#FFF"
-              opacity="0.85"
-            >
-              {aDate}
-            </SvgText>
-          </G>
-        )}
-      </Svg>
-    </View>
-  );
+function buildTVHtml(symbol: string, isDark: boolean, locale: string): string {
+  const theme = isDark ? "dark" : "light";
+  const bg    = isDark ? "#131722" : "#ffffff";
+  // Sanitize symbol to prevent injection
+  const safeSym = symbol.replace(/[^A-Z0-9:_/]/g, "").slice(0, 20);
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;background:${bg};overflow:hidden}
+    .tv-container{width:100%;height:100vh}
+    .tv-container__widget{height:100%}
+  </style>
+</head>
+<body>
+  <div class="tv-container">
+    <div class="tv-container__widget"></div>
+    <script type="text/javascript"
+      src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js"
+      async>
+    {
+      "autosize": true,
+      "symbol": "${safeSym}",
+      "interval": "D",
+      "timezone": "Etc/UTC",
+      "theme": "${theme}",
+      "style": "1",
+      "locale": "${locale}",
+      "allow_symbol_change": false,
+      "save_image": false,
+      "hide_top_toolbar": false,
+      "withdateranges": true,
+      "calendar": false,
+      "support_host": "https://www.tradingview.com"
+    }
+    </script>
+  </div>
+</body>
+</html>`;
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -351,15 +160,13 @@ export default function ConverterScreen() {
   const t          = T[lang];
   const primary    = theme.primary;
 
-  const [fromCurrency, setFromCurrency] = useState<Currency>(getCurrency("ILS"));
+  const [fromCurrency, setFromCurrency] = useState<Currency>(getCurrency("EUR"));
   const [toCurrency,   setToCurrency]   = useState<Currency>(getCurrency("USD"));
   const [fromAmount,   setFromAmount]   = useState("1");
   const [rate,         setRate]         = useState<number | null>(null);
   const [rateDate,     setRateDate]     = useState("");
   const [loadingRate,  setLoadingRate]  = useState(false);
   const [graphPoints,  setGraphPoints]  = useState<number[]>([]);
-  const [graphDates,   setGraphDates]   = useState<string[]>([]);
-  const [activePeriod, setActivePeriod] = useState<Period>("1M");
   const [loadingGraph, setLoadingGraph] = useState(false);
 
   const [pickerVisible,   setPickerVisible]   = useState(false);
@@ -386,20 +193,13 @@ export default function ConverterScreen() {
     finally  { setLoadingRate(false); }
   }, [fromCurrency.code, toCurrency.code]);
 
-  const fetchHistory = useCallback(async (period: Period) => {
+  // Fetch 1-month history for the card sparkline preview
+  const fetchSparkline = useCallback(async () => {
     setLoadingGraph(true);
     setGraphPoints([]);
-    setGraphDates([]);
-    const now = new Date();
-    const toDate = now.toISOString().split("T")[0];
-    const from = new Date(now);
-    if      (period === "1W")  from.setDate(now.getDate() - 7);
-    else if (period === "1M")  from.setMonth(now.getMonth() - 1);
-    else if (period === "3M")  from.setMonth(now.getMonth() - 3);
-    else if (period === "6M")  from.setMonth(now.getMonth() - 6);
-    else if (period === "1Y")  from.setFullYear(now.getFullYear() - 1);
-    else                       from.setFullYear(now.getFullYear() - 5);
-    const fromDate = from.toISOString().split("T")[0];
+    const now      = new Date();
+    const toDate   = now.toISOString().split("T")[0];
+    const fromDate = new Date(now.setMonth(now.getMonth() - 1)).toISOString().split("T")[0];
     try {
       const res  = await fetch(
         `https://api.frankfurter.dev/v2/rates?base=${fromCurrency.code}&quotes=${toCurrency.code}&from=${fromDate}&to=${toDate}`
@@ -409,15 +209,13 @@ export default function ConverterScreen() {
         const entries = (Object.entries(data.rates) as [string, Record<string, number>][])
           .sort(([a], [b]) => a.localeCompare(b));
         setGraphPoints(entries.map(([, r]) => r[toCurrency.code]));
-        setGraphDates(entries.map(([date]) => date));
       }
     } catch {}
     finally { setLoadingGraph(false); }
   }, [fromCurrency.code, toCurrency.code]);
 
-  useEffect(() => { fetchRate(); },                                        [fetchRate]);
-  useEffect(() => { if (graphVisible) fetchHistory(activePeriod); },      [graphVisible, activePeriod, fetchHistory]);
-  useEffect(() => { fetchHistory("1M"); },                                 [fetchHistory]);
+  useEffect(() => { fetchRate(); },      [fetchRate]);
+  useEffect(() => { fetchSparkline(); }, [fetchSparkline]);
 
   const openPicker = (target: "from" | "to") => {
     setPickerTarget(target); setSearch(""); setPickerVisible(true);
@@ -446,11 +244,8 @@ export default function ConverterScreen() {
   const graphIsUp  = (graphTrend ?? 0) >= 0;
   const graphColor = graphIsUp ? GREEN : RED;
 
-  const periodHigh   = graphPoints.length > 0 ? Math.max(...graphPoints) : null;
-  const periodLow    = graphPoints.length > 0 ? Math.min(...graphPoints) : null;
-  const periodChange = graphPoints.length > 1
-    ? graphPoints[graphPoints.length - 1] - graphPoints[0]
-    : null;
+  // TradingView symbol — format: FX:EURUSD
+  const tvSymbol = `FX:${fromCurrency.code}${toCurrency.code}`;
 
   const filtered = CURRENCIES.filter(
     (c) =>
@@ -516,7 +311,7 @@ export default function ConverterScreen() {
           </View>
           {rate !== null && (
             <Text style={[s.rateHint, ds.muted]}>
-              {fromCurrency.symbol}0.11 = {toCurrency.symbol}{(0.11 * rate).toFixed(3)}{"    "}{rateDate}
+              {fromCurrency.symbol}1 = {toCurrency.symbol}{rate.toFixed(4)}{"    "}{rateDate}
             </Text>
           )}
         </View>
@@ -572,25 +367,27 @@ export default function ConverterScreen() {
           )}
         </View>
 
-        {/* ── Graph card ── */}
+        {/* ── Graph card (sparkline preview) ── */}
         <TouchableOpacity style={[s.card, ds.card]} onPress={() => setGraphVisible(true)} activeOpacity={0.85}>
           <View style={s.graphCardRow}>
             <View style={{ flex: 1 }}>
               <Text style={[s.cardTitle, ds.text]}>{t.graph}</Text>
-              {graphTrend !== null && (
-                <View style={s.trendRow}>
+              <View style={s.trendRow}>
+                {graphTrend !== null ? (
                   <View style={[s.trendPill, { backgroundColor: graphColor + "22" }]}>
                     <Text style={[s.trendPillText, { color: graphColor }]}>
                       {graphIsUp ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}%
                     </Text>
                   </View>
-                  <Text style={[s.cardSub, ds.muted]}>1M</Text>
-                </View>
-              )}
+                ) : null}
+                <Text style={[s.cardSub, ds.muted]}>1M · {lang === "fr" ? "Ouvrir TradingView" : "Open TradingView"}</Text>
+              </View>
             </View>
-            {graphPoints.length > 1
-              ? <MiniGraph points={graphPoints} color={graphColor} />
-              : <Text style={[s.chevron, ds.muted]}>›</Text>
+            {loadingGraph
+              ? <ActivityIndicator color={primary} size="small" />
+              : graphPoints.length > 1
+                ? <MiniGraph points={graphPoints} color={graphColor} />
+                : <Text style={[s.chevron, ds.muted]}>›</Text>
             }
           </View>
         </TouchableOpacity>
@@ -704,91 +501,54 @@ export default function ConverterScreen() {
         </View>
       </Modal>
 
-      {/* ══ TradingView Chart Modal ══ */}
-      <Modal visible={graphVisible} animationType="slide" transparent>
-        <Pressable style={s.overlay} onPress={() => setGraphVisible(false)} />
-        <View style={[s.sheet, ds.sheet, s.chartSheet]}>
-          <View style={s.handle} />
+      {/* ══ TradingView Chart (full screen) ══ */}
+      <Modal visible={graphVisible} animationType="slide" transparent={false}>
+        <SafeAreaView style={[s.tvSafe, { backgroundColor: darkMode ? "#131722" : "#F5F5F7" }]}>
 
-          {/* ── Pair header ── */}
-          <View style={s.chartHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.chartPair, ds.muted]}>
+          {/* Header bar */}
+          <View style={[s.tvHeader, { borderBottomColor: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)" }]}>
+            <TouchableOpacity style={s.tvCloseBtn} onPress={() => setGraphVisible(false)}>
+              <Text style={[s.tvCloseText, ds.text]}>✕</Text>
+            </TouchableOpacity>
+
+            <View style={s.tvTitleBlock}>
+              <Text style={[s.tvPair, ds.text]}>
                 {fromCurrency.flag} {fromCurrency.code} / {toCurrency.flag} {toCurrency.code}
               </Text>
-              <View style={s.chartRateRow}>
-                <Text style={[s.chartBigRate, ds.text]}>
-                  {graphPoints.length > 0 ? fmtRate(graphPoints[graphPoints.length - 1]) : "—"}
-                </Text>
-                {graphTrend !== null && (
-                  <View style={[s.chartBadge, { backgroundColor: graphColor + "22" }]}>
-                    <Text style={[s.chartBadgeText, { color: graphColor }]}>
-                      {graphIsUp ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}%
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {periodChange !== null && (
-                <Text style={[s.chartChangeAbs, { color: graphColor }]}>
-                  {periodChange >= 0 ? "+" : ""}{fmtRate(periodChange)} · {activePeriod}
-                </Text>
+              {rate !== null && (
+                <Text style={[s.tvRate, { color: graphColor }]}>{fmtRate(rate)}</Text>
               )}
             </View>
 
-            {/* High / Low */}
-            {periodHigh !== null && periodLow !== null && (
-              <View style={s.hiloBlock}>
-                <View style={s.hiloRow}>
-                  <Text style={[s.hiloLabel, { color: GREEN }]}>H</Text>
-                  <Text style={[s.hiloVal, ds.text]}>{fmtRate(periodHigh)}</Text>
-                </View>
-                <View style={s.hiloRow}>
-                  <Text style={[s.hiloLabel, { color: RED }]}>L</Text>
-                  <Text style={[s.hiloVal, ds.text]}>{fmtRate(periodLow)}</Text>
-                </View>
+            {graphTrend !== null && (
+              <View style={[s.tvBadge, { backgroundColor: graphColor + "22" }]}>
+                <Text style={[s.tvBadgeText, { color: graphColor }]}>
+                  {graphIsUp ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}%
+                </Text>
               </View>
             )}
           </View>
 
-          {/* ── Chart ── */}
-          <View style={s.chartWrap}>
-            {loadingGraph ? (
-              <View style={s.chartLoader}>
+          {/* TradingView WebView */}
+          <WebView
+            style={s.tvWebView}
+            source={{ html: buildTVHtml(tvSymbol, darkMode, lang) }}
+            javaScriptEnabled
+            domStorageEnabled
+            originWhitelist={["*"]}
+            mixedContentMode="always"
+            scrollEnabled={false}
+            startInLoadingState
+            renderLoading={() => (
+              <View style={s.tvLoader}>
                 <ActivityIndicator color={primary} size="large" />
-              </View>
-            ) : graphPoints.length > 1 ? (
-              <TradingChart
-                points={graphPoints}
-                dates={graphDates}
-                isUp={graphIsUp}
-                theme={theme}
-                darkMode={darkMode}
-              />
-            ) : (
-              <View style={s.chartLoader}>
-                <Text style={ds.muted}>{lang === "fr" ? "Données insuffisantes" : "Not enough data"}</Text>
+                <Text style={[s.tvLoaderText, ds.muted]}>
+                  {lang === "fr" ? "Chargement du graphique…" : "Loading chart…"}
+                </Text>
               </View>
             )}
-          </View>
-
-          {/* ── Period selector ── */}
-          <View style={s.periodRow}>
-            {PERIODS.map((p) => (
-              <TouchableOpacity
-                key={p}
-                style={[s.periodBtn, activePeriod === p && { backgroundColor: primary }]}
-                onPress={() => setActivePeriod(p)}
-              >
-                <Text style={[s.periodText, activePeriod === p ? { color: "#FFF" } : ds.muted]}>{p}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* ── Touch hint ── */}
-          <Text style={[s.chartHint, ds.muted]}>
-            {lang === "fr" ? "Touchez et glissez pour explorer" : "Touch & drag to explore"}
-          </Text>
-        </View>
+          />
+        </SafeAreaView>
       </Modal>
 
       {/* ══ Alert ══ */}
@@ -850,7 +610,6 @@ const s = StyleSheet.create({
   tipDot:        { width: 6, height: 6, borderRadius: 3, marginTop: 5 },
   tipText:       { flex: 1, fontSize: 13, lineHeight: 18 },
   graphCardRow:  { flexDirection: "row", alignItems: "center" },
-
   trendRow:      { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   trendPill:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   trendPillText: { fontSize: 12, fontWeight: "700" },
@@ -872,27 +631,19 @@ const s = StyleSheet.create({
   notifyPill:   { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   notifyText:   { fontSize: 11, fontWeight: "600" },
 
-  // ── Trading chart modal
-  chartSheet:    { paddingBottom: 32 },
-  chartHeader:   { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
-  chartPair:     { fontSize: 13, fontWeight: "600", marginBottom: 4, letterSpacing: 0.3 },
-  chartRateRow:  { flexDirection: "row", alignItems: "center", gap: 10 },
-  chartBigRate:  { fontSize: 32, fontWeight: "800", letterSpacing: -0.5 },
-  chartBadge:    { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  chartBadgeText:{ fontSize: 14, fontWeight: "700" },
-  chartChangeAbs:{ fontSize: 13, fontWeight: "600", marginTop: 3 },
-  chartWrap:     { marginVertical: 8 },
-  chartLoader:   { height: 210, justifyContent: "center", alignItems: "center" },
-  chartHint:     { fontSize: 11, textAlign: "center", marginTop: 8, fontStyle: "italic" },
-
-  hiloBlock: { alignItems: "flex-end", gap: 6 },
-  hiloRow:   { flexDirection: "row", alignItems: "center", gap: 6 },
-  hiloLabel: { fontSize: 11, fontWeight: "800", width: 12 },
-  hiloVal:   { fontSize: 13, fontWeight: "600" },
-
-  periodRow:  { flexDirection: "row", justifyContent: "space-around", marginTop: 4 },
-  periodBtn:  { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
-  periodText: { fontSize: 13, fontWeight: "600" },
+  // ── TradingView full screen
+  tvSafe:       { flex: 1 },
+  tvHeader:     { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  tvCloseBtn:   { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", marginRight: 12 },
+  tvCloseText:  { fontSize: 18, fontWeight: "600" },
+  tvTitleBlock: { flex: 1 },
+  tvPair:       { fontSize: 15, fontWeight: "700" },
+  tvRate:       { fontSize: 20, fontWeight: "800", marginTop: 1 },
+  tvBadge:      { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginLeft: 8 },
+  tvBadgeText:  { fontSize: 13, fontWeight: "700" },
+  tvWebView:    { flex: 1 },
+  tvLoader:     { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", gap: 12 },
+  tvLoaderText: { fontSize: 14 },
 
   alertOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 32 },
   alertCard:    { borderRadius: 22, padding: 26, width: "100%" },
