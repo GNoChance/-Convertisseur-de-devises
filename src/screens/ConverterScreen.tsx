@@ -190,7 +190,7 @@ export default function ConverterScreen() {
     if (fromCurrency.code === toCurrency.code) { setRate(1); return; }
     setLoadingRate(true);
     try {
-      const res  = await fetch(`https://api.frankfurter.dev/v2/rates?base=${fromCurrency.code}&quotes=${toCurrency.code}`);
+      const res  = await fetch(`https://api.frankfurter.app/latest?from=${fromCurrency.code}&to=${toCurrency.code}`);
       const data = await res.json();
       setRate(data.rates[toCurrency.code] ?? null);
       setRateDate(data.date ?? "");
@@ -207,7 +207,7 @@ export default function ConverterScreen() {
     const fromDate = new Date(now.setMonth(now.getMonth() - 1)).toISOString().split("T")[0];
     try {
       const res  = await fetch(
-        `https://api.frankfurter.dev/v2/rates?base=${fromCurrency.code}&quotes=${toCurrency.code}&from=${fromDate}&to=${toDate}`
+        `https://api.frankfurter.app/${fromDate}..${toDate}?from=${fromCurrency.code}&to=${toCurrency.code}`
       );
       const data = await res.json();
       if (data.rates) {
