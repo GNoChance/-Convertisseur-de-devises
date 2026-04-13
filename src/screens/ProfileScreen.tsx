@@ -23,9 +23,9 @@ export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const t = T[lang];
 
-  const initials = username
-    ? username.slice(0, 2).toUpperCase()
-    : "?";
+  const guestLabel = lang === "fr" ? "Invité" : "Guest";
+  const displayName = username || guestLabel;
+  const initials = displayName.slice(0, 2).toUpperCase();
 
   const handleSignOut = () => {
     setUsername("");
@@ -42,7 +42,7 @@ export default function ProfileScreen() {
           <View style={[s.avatar, { backgroundColor: theme.primary }]}>
             <Text style={s.avatarText}>{initials}</Text>
           </View>
-          <Text style={[s.name, { color: theme.text }]}>{username || "—"}</Text>
+          <Text style={[s.name, { color: theme.text }]}>{displayName}</Text>
           <Text style={[s.subtitle, { color: theme.muted }]}>
             {lang === "fr" ? "Membre depuis aujourd'hui" : "Member since today"}
           </Text>

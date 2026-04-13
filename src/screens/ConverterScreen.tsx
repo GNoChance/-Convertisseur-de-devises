@@ -353,7 +353,7 @@ export default function ConverterScreen() {
 
   const [fromCurrency, setFromCurrency] = useState<Currency>(getCurrency("ILS"));
   const [toCurrency,   setToCurrency]   = useState<Currency>(getCurrency("USD"));
-  const [fromAmount,   setFromAmount]   = useState("126.56");
+  const [fromAmount,   setFromAmount]   = useState("1");
   const [rate,         setRate]         = useState<number | null>(null);
   const [rateDate,     setRateDate]     = useState("");
   const [loadingRate,  setLoadingRate]  = useState(false);
@@ -478,7 +478,7 @@ export default function ConverterScreen() {
         <View style={s.header}>
           <View style={s.headerLeft}>
             <Text style={[s.greeting, ds.text]} numberOfLines={1} ellipsizeMode="tail">
-              {lang === "fr" ? "Bonjour" : "Hi"} {username || "—"},
+              {lang === "fr" ? "Bonjour" : "Hi"} {username || (lang === "fr" ? "Invité" : "Guest")},
             </Text>
             <Text style={[s.balance, ds.muted]} numberOfLines={1}>{t.balance} : $6,000,000,213.11</Text>
           </View>
