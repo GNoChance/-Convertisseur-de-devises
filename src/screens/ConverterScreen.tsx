@@ -1,9 +1,10 @@
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -12,10 +13,11 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -23,7 +25,7 @@ import { useApp } from "../context/AppContext";
 import { T } from "../i18n/translations";
 import { RootStackParamList } from "../navigation/AppNavigator";
 
-// ─── Data ──────────────────────────────────────────────────────────────────────
+// ─── Data ─────────────────────────────────────────────────────────────────────
 
 const CURRENCIES = [
   { code: "ILS", name: { fr: "Shekel israélien",     en: "Israeli Shekel" },     flag: "🇮🇱", symbol: "₪" },
@@ -65,6 +67,21 @@ function getCurrency(code: string): Currency {
 function fmtNum(v: number) {
   return v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function fmtRate(v: number): string {
+  if (v >= 10000) return v.toFixed(0);
+  if (v >= 1000)  return v.toFixed(1);
+  if (v >= 100)   return v.toFixed(2);
+  if (v >= 10)    return v.toFixed(3);
+  if (v >= 1)     return v.toFixed(4);
+  return v.toFixed(5);
+}
+function fmtDateLabel(date: string): string {
+  if (!date) return "";
+  const parts = date.split("-");
+  if (parts.length !== 3) return date;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[parseInt(parts[1]) - 1]} ${parseInt(parts[2])}`;
+}
 function mkShadow(color = "#000", dark = false): object {
   if (dark) return {};
   return Platform.select({
@@ -74,7 +91,7 @@ function mkShadow(color = "#000", dark = false): object {
   }) ?? {};
 }
 
-// ─── SVG helpers ──────────────────────────────────────────────────────────────
+// ─── Mini graph (card preview) ────────────────────────────────────────────────
 
 function MiniGraph({ points, color, W = 110, H = 36 }: { points: number[]; color: string; W?: number; H?: number }) {
   if (points.length < 2) return null;
@@ -97,26 +114,230 @@ function MiniGraph({ points, color, W = 110, H = 36 }: { points: number[]; color
   );
 }
 
-function FullGraph({ points, color }: { points: number[]; color: string }) {
-  const W = 320, H = 140, pad = { t: 16, b: 28, l: 44, r: 8 };
-  if (points.length < 2) return null;
-  const min = Math.min(...points), max = Math.max(...points), range = max - min || 1;
-  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
-  const xs   = points.map((_, i) => pad.l + (i / (points.length - 1)) * iw);
-  const ys   = points.map((v) => pad.t + ih - ((v - min) / range) * ih);
-  const line = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
-  const area = line + ` L${xs[xs.length - 1].toFixed(1)},${(pad.t + ih).toFixed(1)} L${xs[0].toFixed(1)},${(pad.t + ih).toFixed(1)} Z`;
+// ─── TradingView-style chart ──────────────────────────────────────────────────
+
+type TradingChartProps = {
+  points:  number[];
+  dates:   string[];
+  isUp:    boolean;
+  theme:   typeof import("../context/AppContext").LIGHT;
+  darkMode: boolean;
+};
+
+function TradingChart({ points, dates, isUp, theme, darkMode }: TradingChartProps) {
+  const { width: screenW } = useWindowDimensions();
+  const W     = Math.max(screenW - 40, 280);
+  const H     = 210;
+  const PL    = 56; // padding left (for Y labels)
+  const PR    = 10; // padding right
+  const PT    = 18; // padding top
+  const PB    = 34; // padding bottom (for X labels)
+  const iw    = W - PL - PR;
+  const ih    = H - PT - PB;
+
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+
+  // Ref so PanResponder callbacks always see latest values
+  const ctxRef = useRef({ points, iw, PL });
+  ctxRef.current = { points, iw, PL };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderGrant: (e) => {
+        const { points: pts, iw: _iw, PL: _pl } = ctxRef.current;
+        if (pts.length < 2) return;
+        const relX = e.nativeEvent.locationX - _pl;
+        const idx  = Math.round((relX / _iw) * (pts.length - 1));
+        setActiveIdx(Math.max(0, Math.min(pts.length - 1, idx)));
+      },
+      onPanResponderMove: (e) => {
+        const { points: pts, iw: _iw, PL: _pl } = ctxRef.current;
+        if (pts.length < 2) return;
+        const relX = e.nativeEvent.locationX - _pl;
+        const idx  = Math.round((relX / _iw) * (pts.length - 1));
+        setActiveIdx(Math.max(0, Math.min(pts.length - 1, idx)));
+      },
+      onPanResponderRelease: () => {
+        setTimeout(() => setActiveIdx(null), 2500);
+      },
+    })
+  ).current;
+
+  if (points.length < 2) {
+    return <View style={{ height: H, justifyContent: "center", alignItems: "center" }} />;
+  }
+
+  const min   = Math.min(...points);
+  const max   = Math.max(...points);
+  const range = max - min || 0.00001;
+  const color = isUp ? GREEN : RED;
+
+  const toX = (i: number) => PL + (i / (points.length - 1)) * iw;
+  const toY = (v: number) => PT + ih - ((v - min) / range) * ih;
+
+  // SVG paths
+  const linePath = points.map((v, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+  const areaPath = `${linePath} L${toX(points.length - 1).toFixed(1)},${(PT + ih).toFixed(1)} L${PL},${(PT + ih).toFixed(1)} Z`;
+
+  // Y-axis grid (5 horizontal lines)
+  const GRID_Y = 5;
+  const yLevels = Array.from({ length: GRID_Y }, (_, i) => {
+    const frac = i / (GRID_Y - 1);
+    const v    = min + frac * range;
+    return { v, y: toY(v) };
+  });
+
+  // X-axis labels (4 ticks)
+  const X_TICKS = 4;
+  const xTicks = Array.from({ length: X_TICKS }, (_, i) => {
+    const idx = Math.round((i / (X_TICKS - 1)) * (points.length - 1));
+    return { idx, x: toX(idx), label: fmtDateLabel(dates[idx] ?? "") };
+  });
+
+  // Crosshair state
+  const hasActive  = activeIdx !== null;
+  const aX         = hasActive ? toX(activeIdx!) : null;
+  const aY         = hasActive ? toY(points[activeIdx!]) : null;
+  const aVal       = hasActive ? points[activeIdx!] : null;
+  const aDate      = hasActive ? (dates[activeIdx!] ?? "") : "";
+
+  // Tooltip: flip to left side when near right edge
+  const TOOLTIP_W  = 120;
+  const TOOLTIP_H  = 34;
+  const tooltipX   = aX !== null ? (aX > W * 0.6 ? aX - TOOLTIP_W - 8 : aX + 8) : 0;
+  const tooltipY   = aY !== null ? Math.max(PT, aY - TOOLTIP_H - 4) : 0;
+
+  const gridStroke  = darkMode ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)";
+  const mutedFill   = theme.muted;
+  const gradId      = `tvg-${isUp ? "up" : "dn"}`;
+
   return (
-    <Svg width={W} height={H}>
-      <Defs>
-        <LinearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={color} stopOpacity="0.28" />
-          <Stop offset="1" stopColor={color} stopOpacity="0" />
-        </LinearGradient>
-      </Defs>
-      <Path d={area} fill="url(#fg)" />
-      <Path d={line} stroke={color} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
+    <View {...panResponder.panHandlers}>
+      <Svg width={W} height={H}>
+        <Defs>
+          <LinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0"   stopColor={color} stopOpacity="0.32" />
+            <Stop offset="0.6" stopColor={color} stopOpacity="0.08" />
+            <Stop offset="1"   stopColor={color} stopOpacity="0"    />
+          </LinearGradient>
+        </Defs>
+
+        {/* Y-axis grid lines + labels */}
+        {yLevels.map(({ v, y }, i) => (
+          <G key={`y${i}`}>
+            <Line
+              x1={PL} y1={y}
+              x2={W - PR} y2={y}
+              stroke={gridStroke}
+              strokeWidth="1"
+            />
+            <SvgText
+              x={PL - 5} y={y + 3.5}
+              textAnchor="end"
+              fontSize="9"
+              fill={mutedFill}
+            >
+              {fmtRate(v)}
+            </SvgText>
+          </G>
+        ))}
+
+        {/* Area fill */}
+        <Path d={areaPath} fill={`url(#${gradId})`} />
+
+        {/* Main line */}
+        <Path
+          d={linePath}
+          stroke={color}
+          strokeWidth="2.5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Last price dot (pulse) — only when no crosshair */}
+        {!hasActive && (
+          <G>
+            <Circle
+              cx={toX(points.length - 1)}
+              cy={toY(points[points.length - 1])}
+              r="8"
+              fill={color}
+              opacity="0.18"
+            />
+            <Circle
+              cx={toX(points.length - 1)}
+              cy={toY(points[points.length - 1])}
+              r="4"
+              fill={color}
+            />
+          </G>
+        )}
+
+        {/* X-axis date labels */}
+        {xTicks.map(({ x, label }, i) => (
+          <SvgText
+            key={`x${i}`}
+            x={x} y={H - 6}
+            textAnchor={i === 0 ? "start" : i === X_TICKS - 1 ? "end" : "middle"}
+            fontSize="9.5"
+            fill={mutedFill}
+          >
+            {label}
+          </SvgText>
+        ))}
+
+        {/* ── Crosshair ── */}
+        {hasActive && aX !== null && aY !== null && aVal !== null && (
+          <G>
+            {/* Vertical dashed line */}
+            <Line
+              x1={aX} y1={PT}
+              x2={aX} y2={PT + ih}
+              stroke={color}
+              strokeWidth="1.5"
+              strokeDasharray="5,3"
+              opacity="0.75"
+            />
+            {/* Dot */}
+            <Circle cx={aX} cy={aY} r="10" fill={color} opacity="0.18" />
+            <Circle cx={aX} cy={aY} r="5"  fill={color} />
+            {/* Tooltip background */}
+            <Rect
+              x={tooltipX} y={tooltipY}
+              width={TOOLTIP_W} height={TOOLTIP_H}
+              rx="8"
+              fill={color}
+              opacity="0.93"
+            />
+            {/* Tooltip value */}
+            <SvgText
+              x={tooltipX + TOOLTIP_W / 2}
+              y={tooltipY + 13}
+              textAnchor="middle"
+              fontSize="12"
+              fontWeight="700"
+              fill="#FFF"
+            >
+              {fmtRate(aVal)}
+            </SvgText>
+            {/* Tooltip date */}
+            <SvgText
+              x={tooltipX + TOOLTIP_W / 2}
+              y={tooltipY + 27}
+              textAnchor="middle"
+              fontSize="9"
+              fill="#FFF"
+              opacity="0.85"
+            >
+              {aDate}
+            </SvgText>
+          </G>
+        )}
+      </Svg>
+    </View>
   );
 }
 
@@ -137,6 +358,7 @@ export default function ConverterScreen() {
   const [rateDate,     setRateDate]     = useState("");
   const [loadingRate,  setLoadingRate]  = useState(false);
   const [graphPoints,  setGraphPoints]  = useState<number[]>([]);
+  const [graphDates,   setGraphDates]   = useState<string[]>([]);
   const [activePeriod, setActivePeriod] = useState<Period>("1M");
   const [loadingGraph, setLoadingGraph] = useState(false);
 
@@ -167,6 +389,7 @@ export default function ConverterScreen() {
   const fetchHistory = useCallback(async (period: Period) => {
     setLoadingGraph(true);
     setGraphPoints([]);
+    setGraphDates([]);
     const now = new Date();
     const toDate = now.toISOString().split("T")[0];
     const from = new Date(now);
@@ -186,6 +409,7 @@ export default function ConverterScreen() {
         const entries = (Object.entries(data.rates) as [string, Record<string, number>][])
           .sort(([a], [b]) => a.localeCompare(b));
         setGraphPoints(entries.map(([, r]) => r[toCurrency.code]));
+        setGraphDates(entries.map(([date]) => date));
       }
     } catch {}
     finally { setLoadingGraph(false); }
@@ -219,6 +443,14 @@ export default function ConverterScreen() {
     graphPoints.length > 1
       ? ((graphPoints[graphPoints.length - 1] - graphPoints[0]) / graphPoints[0]) * 100
       : null;
+  const graphIsUp  = (graphTrend ?? 0) >= 0;
+  const graphColor = graphIsUp ? GREEN : RED;
+
+  const periodHigh   = graphPoints.length > 0 ? Math.max(...graphPoints) : null;
+  const periodLow    = graphPoints.length > 0 ? Math.min(...graphPoints) : null;
+  const periodChange = graphPoints.length > 1
+    ? graphPoints[graphPoints.length - 1] - graphPoints[0]
+    : null;
 
   const filtered = CURRENCIES.filter(
     (c) =>
@@ -227,12 +459,12 @@ export default function ConverterScreen() {
   );
 
   const ds = {
-    bg:    { backgroundColor: theme.bg },
-    card:  { backgroundColor: theme.card, ...mkShadow("#000", darkMode) },
-    text:  { color: theme.text },
-    muted: { color: theme.muted },
-    pill:  { backgroundColor: theme.input },
-    sheet: { backgroundColor: theme.card },
+    bg:      { backgroundColor: theme.bg },
+    card:    { backgroundColor: theme.card, ...mkShadow("#000", darkMode) },
+    text:    { color: theme.text },
+    muted:   { color: theme.muted },
+    pill:    { backgroundColor: theme.input },
+    sheet:   { backgroundColor: theme.card },
     inputBg: { backgroundColor: theme.input },
   };
 
@@ -340,19 +572,24 @@ export default function ConverterScreen() {
           )}
         </View>
 
-        {/* ── Graph ── */}
+        {/* ── Graph card ── */}
         <TouchableOpacity style={[s.card, ds.card]} onPress={() => setGraphVisible(true)} activeOpacity={0.85}>
           <View style={s.graphCardRow}>
             <View style={{ flex: 1 }}>
               <Text style={[s.cardTitle, ds.text]}>{t.graph}</Text>
               {graphTrend !== null && (
-                <Text style={[s.cardSub, { color: graphTrend >= 0 ? GREEN : RED }]}>
-                  {graphTrend >= 0 ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}%
-                </Text>
+                <View style={s.trendRow}>
+                  <View style={[s.trendPill, { backgroundColor: graphColor + "22" }]}>
+                    <Text style={[s.trendPillText, { color: graphColor }]}>
+                      {graphIsUp ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}%
+                    </Text>
+                  </View>
+                  <Text style={[s.cardSub, ds.muted]}>1M</Text>
+                </View>
               )}
             </View>
             {graphPoints.length > 1
-              ? <MiniGraph points={graphPoints} color={primary} />
+              ? <MiniGraph points={graphPoints} color={graphColor} />
               : <Text style={[s.chevron, ds.muted]}>›</Text>
             }
           </View>
@@ -467,28 +704,74 @@ export default function ConverterScreen() {
         </View>
       </Modal>
 
-      {/* ══ Graph ══ */}
+      {/* ══ TradingView Chart Modal ══ */}
       <Modal visible={graphVisible} animationType="slide" transparent>
         <Pressable style={s.overlay} onPress={() => setGraphVisible(false)} />
-        <View style={[s.sheet, ds.sheet, { paddingBottom: 36 }]}>
+        <View style={[s.sheet, ds.sheet, s.chartSheet]}>
           <View style={s.handle} />
-          <Text style={[s.sheetTitle, ds.text]}>{fromCurrency.code} / {toCurrency.code}</Text>
-          {graphPoints.length > 0 && (
-            <>
-              <Text style={[s.graphBigRate, ds.text]}>{graphPoints[graphPoints.length - 1]?.toFixed(4)}</Text>
-              {graphTrend !== null && (
-                <Text style={[s.graphTrendText, { color: graphTrend >= 0 ? GREEN : RED }]}>
-                  {graphTrend >= 0 ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}% · {activePeriod}
+
+          {/* ── Pair header ── */}
+          <View style={s.chartHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.chartPair, ds.muted]}>
+                {fromCurrency.flag} {fromCurrency.code} / {toCurrency.flag} {toCurrency.code}
+              </Text>
+              <View style={s.chartRateRow}>
+                <Text style={[s.chartBigRate, ds.text]}>
+                  {graphPoints.length > 0 ? fmtRate(graphPoints[graphPoints.length - 1]) : "—"}
+                </Text>
+                {graphTrend !== null && (
+                  <View style={[s.chartBadge, { backgroundColor: graphColor + "22" }]}>
+                    <Text style={[s.chartBadgeText, { color: graphColor }]}>
+                      {graphIsUp ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}%
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {periodChange !== null && (
+                <Text style={[s.chartChangeAbs, { color: graphColor }]}>
+                  {periodChange >= 0 ? "+" : ""}{fmtRate(periodChange)} · {activePeriod}
                 </Text>
               )}
-            </>
-          )}
-          <View style={{ alignItems: "center", marginVertical: 16 }}>
-            {loadingGraph
-              ? <ActivityIndicator color={primary} style={{ height: 140 }} />
-              : <FullGraph points={graphPoints} color={primary} />
-            }
+            </View>
+
+            {/* High / Low */}
+            {periodHigh !== null && periodLow !== null && (
+              <View style={s.hiloBlock}>
+                <View style={s.hiloRow}>
+                  <Text style={[s.hiloLabel, { color: GREEN }]}>H</Text>
+                  <Text style={[s.hiloVal, ds.text]}>{fmtRate(periodHigh)}</Text>
+                </View>
+                <View style={s.hiloRow}>
+                  <Text style={[s.hiloLabel, { color: RED }]}>L</Text>
+                  <Text style={[s.hiloVal, ds.text]}>{fmtRate(periodLow)}</Text>
+                </View>
+              </View>
+            )}
           </View>
+
+          {/* ── Chart ── */}
+          <View style={s.chartWrap}>
+            {loadingGraph ? (
+              <View style={s.chartLoader}>
+                <ActivityIndicator color={primary} size="large" />
+              </View>
+            ) : graphPoints.length > 1 ? (
+              <TradingChart
+                points={graphPoints}
+                dates={graphDates}
+                isUp={graphIsUp}
+                theme={theme}
+                darkMode={darkMode}
+              />
+            ) : (
+              <View style={s.chartLoader}>
+                <Text style={ds.muted}>{lang === "fr" ? "Données insuffisantes" : "Not enough data"}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* ── Period selector ── */}
           <View style={s.periodRow}>
             {PERIODS.map((p) => (
               <TouchableOpacity
@@ -500,6 +783,11 @@ export default function ConverterScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* ── Touch hint ── */}
+          <Text style={[s.chartHint, ds.muted]}>
+            {lang === "fr" ? "Touchez et glissez pour explorer" : "Touch & drag to explore"}
+          </Text>
         </View>
       </Modal>
 
@@ -563,6 +851,10 @@ const s = StyleSheet.create({
   tipText:       { flex: 1, fontSize: 13, lineHeight: 18 },
   graphCardRow:  { flexDirection: "row", alignItems: "center" },
 
+  trendRow:      { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  trendPill:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  trendPillText: { fontSize: 12, fontWeight: "700" },
+
   exchangeBtn:  { borderRadius: 16, paddingVertical: 18, alignItems: "center", marginTop: 6 },
   exchangeText: { fontSize: 17, fontWeight: "700", color: "#FFF" },
 
@@ -580,11 +872,27 @@ const s = StyleSheet.create({
   notifyPill:   { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   notifyText:   { fontSize: 11, fontWeight: "600" },
 
-  graphBigRate:   { fontSize: 34, fontWeight: "700", marginTop: 4 },
-  graphTrendText: { fontSize: 14, fontWeight: "600", marginTop: 2 },
-  periodRow:      { flexDirection: "row", justifyContent: "space-around", marginTop: 4 },
-  periodBtn:      { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
-  periodText:     { fontSize: 13, fontWeight: "600" },
+  // ── Trading chart modal
+  chartSheet:    { paddingBottom: 32 },
+  chartHeader:   { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
+  chartPair:     { fontSize: 13, fontWeight: "600", marginBottom: 4, letterSpacing: 0.3 },
+  chartRateRow:  { flexDirection: "row", alignItems: "center", gap: 10 },
+  chartBigRate:  { fontSize: 32, fontWeight: "800", letterSpacing: -0.5 },
+  chartBadge:    { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  chartBadgeText:{ fontSize: 14, fontWeight: "700" },
+  chartChangeAbs:{ fontSize: 13, fontWeight: "600", marginTop: 3 },
+  chartWrap:     { marginVertical: 8 },
+  chartLoader:   { height: 210, justifyContent: "center", alignItems: "center" },
+  chartHint:     { fontSize: 11, textAlign: "center", marginTop: 8, fontStyle: "italic" },
+
+  hiloBlock: { alignItems: "flex-end", gap: 6 },
+  hiloRow:   { flexDirection: "row", alignItems: "center", gap: 6 },
+  hiloLabel: { fontSize: 11, fontWeight: "800", width: 12 },
+  hiloVal:   { fontSize: 13, fontWeight: "600" },
+
+  periodRow:  { flexDirection: "row", justifyContent: "space-around", marginTop: 4 },
+  periodBtn:  { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
+  periodText: { fontSize: 13, fontWeight: "600" },
 
   alertOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 32 },
   alertCard:    { borderRadius: 22, padding: 26, width: "100%" },
