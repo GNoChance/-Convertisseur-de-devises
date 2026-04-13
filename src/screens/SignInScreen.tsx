@@ -41,7 +41,7 @@ export default function SignInScreen() {
     try {
       const user = await signIn(email.trim(), password);
       setUsername(user.username);
-      navigation.replace("Converter");
+      navigation.replace("Main");
     } catch (err) {
       const authErr = err as AuthError;
       setError(authErr.message ?? t.errGeneric);

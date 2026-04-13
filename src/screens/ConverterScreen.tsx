@@ -122,7 +122,7 @@ function FullGraph({ points, color }: { points: number[]; color: string }) {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
-type Nav = NativeStackNavigationProp<RootStackParamList, "Converter">;
+type Nav = NativeStackNavigationProp<RootStackParamList, "Main">;
 
 export default function ConverterScreen() {
   const { theme, lang, darkMode, setDarkMode, setLang, username } = useApp();
@@ -244,11 +244,11 @@ export default function ConverterScreen() {
 
         {/* ── Header ── */}
         <View style={s.header}>
-          <View>
-            <Text style={[s.greeting, ds.text]}>
+          <View style={s.headerLeft}>
+            <Text style={[s.greeting, ds.text]} numberOfLines={1} ellipsizeMode="tail">
               {lang === "fr" ? "Bonjour" : "Hi"} {username || "—"},
             </Text>
-            <Text style={[s.balance, ds.muted]}>{t.balance} : $6,000,000,213.11</Text>
+            <Text style={[s.balance, ds.muted]} numberOfLines={1}>{t.balance} : $6,000,000,213.11</Text>
           </View>
           <View style={s.headerIcons}>
             <TouchableOpacity onPress={() => setAlertVisible(true)} style={s.iconWrap}>
@@ -404,7 +404,7 @@ export default function ConverterScreen() {
 
           <TouchableOpacity
             style={[s.settingsRow, { borderBottomColor: theme.border }]}
-            onPress={() => { setSettingsVisible(false); navigation.navigate("SignIn"); }}
+            onPress={() => { setSettingsVisible(false); navigation.getParent()?.navigate("SignIn"); }}
           >
             <Text style={[s.settingsLabel, ds.text]}>🔓 {lang === "fr" ? "Se déconnecter" : "Sign out"}</Text>
             <Text style={[s.chevron, ds.muted]}>›</Text>
@@ -527,10 +527,11 @@ const s = StyleSheet.create({
   scroll:  { flex: 1 },
   content: { paddingHorizontal: 20, paddingBottom: 48 },
 
-  header:      { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 16, marginBottom: 28 },
+  header:      { flexDirection: "row", alignItems: "flex-start", marginTop: 16, marginBottom: 28 },
   greeting:    { fontSize: 24, fontWeight: "700" },
   balance:     { fontSize: 13, marginTop: 3 },
-  headerIcons: { flexDirection: "row", gap: 8, alignItems: "center" },
+  headerLeft:  { flex: 1, overflow: "hidden", marginRight: 8 },
+  headerIcons: { flexDirection: "row", gap: 8, alignItems: "center", flexShrink: 0 },
   iconWrap:    { position: "relative", padding: 4 },
   iconEmoji:   { fontSize: 22 },
   badge:       { position: "absolute", top: 4, right: 4, width: 10, height: 10, borderRadius: 5, backgroundColor: RED, borderWidth: 2, borderColor: "transparent" },

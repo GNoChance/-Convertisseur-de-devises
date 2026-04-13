@@ -88,7 +88,7 @@ export default function SignUpScreen() {
       setAppUsername(user.username);
       setSuccess(true);
       // Navigate to Converter after short delay
-      setTimeout(() => navigation.replace("Converter"), 1200);
+      setTimeout(() => navigation.replace("Main"), 1200);
     } catch (err) {
       const authErr = err as AuthError;
       if (authErr.field === "email") {
