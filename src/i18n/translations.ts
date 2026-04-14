@@ -3,7 +3,7 @@ export type Lang = "fr" | "en";
 export const T = {
   fr: {
     // Header
-    greeting:       "Bonjour Amos,",
+    greeting:       "Bonjour,",
     balance:        "Solde",
     // Converter
     youSend:        "Vous envoyez",
@@ -65,9 +65,34 @@ export const T = {
     phEmail:        "ex : jean@email.com",
     phPassword:     "••••••••",
     phConfirm:      "••••••••",
+    // Watchlist
+    watchlistTitle:   "Mes devises suivies",
+    watchlistEmpty:   "Aucune devise suivie",
+    watchlistAdd:     "Ajouter une devise",
+    watchlistRemove:  "Retirer",
+    watchlistAdded:   "Ajouté aux favoris",
+    // Notifications
+    notifTitle:  "Notifications",
+    notifOn:     "Activées",
+    notifOff:    "Désactivées",
+    notifDesc:   "Recevez des alertes quand un taux change.",
+    // Detail
+    detailChart:     "Évolution 30 jours",
+    detailCurrent:   "Taux actuel",
+    detailChange:    "Variation",
+    detailMin:       "Min 30j",
+    detailMax:       "Max 30j",
+    detailSource:    "Source : Frankfurter Open API",
+    detailFollow:    "Suivre",
+    detailUnfollow:  "Ne plus suivre",
+    chartUnavail:    "Données indisponibles",
+    // Nav labels
+    navHome:    "Accueil",
+    navChart:   "Graphique",
+    navProfile: "Profil",
   },
   en: {
-    greeting:       "Hi Amos,",
+    greeting:       "Hello,",
     balance:        "Balance",
     youSend:        "You send",
     theyGet:        "They get",
@@ -94,7 +119,7 @@ export const T = {
     settingsVersion:"Version 1.0.0",
     settingsDone:   "Close",
     rateLabel:      (from: string, rate: string, to: string) => `1 ${from} = ${rate} ${to}`,
-    goToNow:        (rate: string, code: string) => `Go to now: ${rate} ${code}`,
+    goToNow:        (rate: string, code: string) => `Current rate: ${rate} ${code}`,
     exchangeConfirmTitle: "Confirm Exchange",
     exchangeConfirmBtn:   "Confirm",
     exchangeCancelBtn:    "Cancel",
@@ -126,5 +151,30 @@ export const T = {
     phEmail:        "e.g. john@email.com",
     phPassword:     "••••••••",
     phConfirm:      "••••••••",
+    // Watchlist
+    watchlistTitle:   "My watchlist",
+    watchlistEmpty:   "No currencies tracked",
+    watchlistAdd:     "Add a currency",
+    watchlistRemove:  "Remove",
+    watchlistAdded:   "Added to watchlist",
+    // Notifications
+    notifTitle:  "Notifications",
+    notifOn:     "Enabled",
+    notifOff:    "Disabled",
+    notifDesc:   "Receive alerts when a rate changes.",
+    // Detail
+    detailChart:     "30-day trend",
+    detailCurrent:   "Current rate",
+    detailChange:    "Change",
+    detailMin:       "Min 30d",
+    detailMax:       "Max 30d",
+    detailSource:    "Source: Frankfurter Open API",
+    detailFollow:    "Follow",
+    detailUnfollow:  "Unfollow",
+    chartUnavail:    "Data unavailable",
+    // Nav labels
+    navHome:    "Home",
+    navChart:   "Chart",
+    navProfile: "Profile",
   },
 } as const;

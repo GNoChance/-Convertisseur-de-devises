@@ -1,9 +1,7 @@
-import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -15,19 +13,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
-
-// WebView n'est pas disponible sur Expo Web
-const WebView = Platform.OS !== "web"
-  ? require("react-native-webview").WebView
-  : null;
 import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
 import { useApp } from "../context/AppContext";
 import { T } from "../i18n/translations";
-import { RootStackParamList } from "../navigation/AppNavigator";
+import { TabParamList } from "../navigation/AppNavigator";
+import Layout from "../components/Layout";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -60,22 +52,16 @@ const CURRENCIES = [
 
 type Currency = (typeof CURRENCIES)[number];
 
-const RED   = "#FF3B30";
-const GREEN = "#34C759";
+// Lookup rapide flag par code (utilisé dans la liste API)
+const FLAGS: Record<string, string> = Object.fromEntries(CURRENCIES.map((c) => [c.code, c.flag]));
+
+const RED = "#FF3B30";
 
 function getCurrency(code: string): Currency {
   return CURRENCIES.find((c) => c.code === code) ?? CURRENCIES[0];
 }
 function fmtNum(v: number) {
   return v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtRate(v: number): string {
-  if (v >= 10000) return v.toFixed(0);
-  if (v >= 1000)  return v.toFixed(1);
-  if (v >= 100)   return v.toFixed(2);
-  if (v >= 10)    return v.toFixed(3);
-  if (v >= 1)     return v.toFixed(4);
-  return v.toFixed(5);
 }
 function mkShadow(color = "#000", dark = false): object {
   if (dark) return {};
@@ -86,81 +72,15 @@ function mkShadow(color = "#000", dark = false): object {
   }) ?? {};
 }
 
-// ─── Mini sparkline (card preview) ───────────────────────────────────────────
-
-function MiniGraph({ points, color, W = 110, H = 36 }: { points: number[]; color: string; W?: number; H?: number }) {
-  if (points.length < 2) return null;
-  const min = Math.min(...points), max = Math.max(...points), range = max - min || 1;
-  const xs   = points.map((_, i) => (i / (points.length - 1)) * W);
-  const ys   = points.map((v) => H - ((v - min) / range) * H * 0.8 - H * 0.1);
-  const line = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
-  const area = line + ` L${W},${H} L0,${H} Z`;
-  return (
-    <Svg width={W} height={H}>
-      <Defs>
-        <LinearGradient id="mg" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={color} stopOpacity="0.25" />
-          <Stop offset="1" stopColor={color} stopOpacity="0" />
-        </LinearGradient>
-      </Defs>
-      <Path d={area} fill="url(#mg)" />
-      <Path d={line} stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
-// ─── TradingView HTML template ────────────────────────────────────────────────
-
-function buildTVHtml(symbol: string, isDark: boolean, locale: string): string {
-  const theme = isDark ? "dark" : "light";
-  const bg    = isDark ? "#131722" : "#ffffff";
-  // Sanitize symbol to prevent injection
-  const safeSym = symbol.replace(/[^A-Z0-9:_/]/g, "").slice(0, 20);
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    html,body{width:100%;height:100%;background:${bg};overflow:hidden}
-    .tv-container{width:100%;height:100vh}
-    .tv-container__widget{height:100%}
-  </style>
-</head>
-<body>
-  <div class="tv-container">
-    <div class="tv-container__widget"></div>
-    <script type="text/javascript"
-      src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js"
-      async>
-    {
-      "autosize": true,
-      "symbol": "${safeSym}",
-      "interval": "D",
-      "timezone": "Etc/UTC",
-      "theme": "${theme}",
-      "style": "1",
-      "locale": "${locale}",
-      "allow_symbol_change": false,
-      "save_image": false,
-      "hide_top_toolbar": false,
-      "withdateranges": true,
-      "calendar": false,
-      "support_host": "https://www.tradingview.com"
-    }
-    </script>
-  </div>
-</body>
-</html>`;
-}
-
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
-type Nav = NativeStackNavigationProp<RootStackParamList, "Main">;
+type Nav = BottomTabNavigationProp<TabParamList>;
 
 export default function ConverterScreen() {
-  const { theme, lang, darkMode, setDarkMode, setLang, username } = useApp();
+  const {
+    theme, lang, darkMode, setDarkMode, setLang,
+    watchlist, addToWatchlist, removeFromWatchlist, isInWatchlist,
+  } = useApp();
   const navigation = useNavigation<Nav>();
   const t          = T[lang];
   const primary    = theme.primary;
@@ -171,14 +91,10 @@ export default function ConverterScreen() {
   const [rate,         setRate]         = useState<number | null>(null);
   const [rateDate,     setRateDate]     = useState("");
   const [loadingRate,  setLoadingRate]  = useState(false);
-  const [graphPoints,  setGraphPoints]  = useState<number[]>([]);
-  const [loadingGraph, setLoadingGraph] = useState(false);
-
+  const [rateError,    setRateError]    = useState(false);
   const [pickerVisible,   setPickerVisible]   = useState(false);
   const [pickerTarget,    setPickerTarget]    = useState<"from" | "to">("from");
   const [search,          setSearch]          = useState("");
-  const [graphVisible,    setGraphVisible]    = useState(false);
-  const [foresightOpen,   setForesightOpen]   = useState(false);
   const [alertVisible,    setAlertVisible]    = useState(false);
   const [notifyTarget,    setNotifyTarget]    = useState<Currency | null>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -186,44 +102,70 @@ export default function ConverterScreen() {
   const [exchangeDone,    setExchangeDone]    = useState(false);
   const [exchangeErr,     setExchangeErr]     = useState<string | null>(null);
 
+  // ── Watchlist ──
+  const [wlPickerVisible,  setWlPickerVisible]  = useState(false);
+  const [wlRates,          setWlRates]          = useState<Record<string, number>>({});
+  const [wlSearch,         setWlSearch]         = useState("");
+
+  // Récupère les taux pour toutes les devises de la watchlist
+  useEffect(() => {
+    if (watchlist.length === 0) return;
+    const targets = watchlist.join(",");
+    fetch(
+      `https://api.frankfurter.app/latest?from=${fromCurrency.code}&to=${targets}`,
+      { headers: { Accept: "application/json" } }
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.rates) setWlRates(data.rates as Record<string, number>);
+      })
+      .catch(() => {});
+  }, [watchlist, fromCurrency.code]);
+
+  // ── Liste complète depuis Frankfurter API ──
+  const [apiCurrencies,        setApiCurrencies]        = useState<{ code: string; name: string }[]>([]);
+  const [loadingApiCurrencies, setLoadingApiCurrencies] = useState(true);
+
   const numFrom = parseFloat(fromAmount.replace(",", ".")) || 0;
   const numTo   = rate !== null ? numFrom * rate : null;
 
   const fetchRate = useCallback(async () => {
-    if (fromCurrency.code === toCurrency.code) { setRate(1); return; }
+    if (fromCurrency.code === toCurrency.code) { setRate(1); setRateError(false); return; }
     setLoadingRate(true);
+    setRateError(false);
     try {
-      const res  = await fetch(`https://api.frankfurter.app/latest?from=${fromCurrency.code}&to=${toCurrency.code}`);
+      const res  = await fetch(
+        `https://api.frankfurter.app/latest?from=${fromCurrency.code}&to=${toCurrency.code}`,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setRate(data.rates[toCurrency.code] ?? null);
+      const fetched = data.rates?.[toCurrency.code];
+      if (fetched == null) throw new Error("rate_missing");
+      setRate(fetched);
       setRateDate(data.date ?? "");
-    } catch { setRate(null); }
+      setRateError(false);
+    } catch {
+      setRate(null);
+      setRateError(true);
+    }
     finally  { setLoadingRate(false); }
   }, [fromCurrency.code, toCurrency.code]);
 
-  // Fetch 1-month history for the card sparkline preview
-  const fetchSparkline = useCallback(async () => {
-    setLoadingGraph(true);
-    setGraphPoints([]);
-    const now      = new Date();
-    const toDate   = now.toISOString().split("T")[0];
-    const fromDate = new Date(now.setMonth(now.getMonth() - 1)).toISOString().split("T")[0];
-    try {
-      const res  = await fetch(
-        `https://api.frankfurter.app/${fromDate}..${toDate}?from=${fromCurrency.code}&to=${toCurrency.code}`
-      );
-      const data = await res.json();
-      if (data.rates) {
-        const entries = (Object.entries(data.rates) as [string, Record<string, number>][])
-          .sort(([a], [b]) => a.localeCompare(b));
-        setGraphPoints(entries.map(([, r]) => r[toCurrency.code]));
-      }
-    } catch {}
-    finally { setLoadingGraph(false); }
-  }, [fromCurrency.code, toCurrency.code]);
+  useEffect(() => { fetchRate(); }, [fetchRate]);
 
-  useEffect(() => { fetchRate(); },      [fetchRate]);
-  useEffect(() => { fetchSparkline(); }, [fetchSparkline]);
+  // Charge la liste complète des devises depuis Frankfurter au montage
+  useEffect(() => {
+    fetch("https://api.frankfurter.app/currencies", { headers: { Accept: "application/json" } })
+      .then((r) => r.json())
+      .then((data: Record<string, string>) => {
+        setApiCurrencies(
+          Object.entries(data).map(([code, name]) => ({ code, name }))
+        );
+      })
+      .catch(() => {})
+      .finally(() => setLoadingApiCurrencies(false));
+  }, []);
 
   const openPicker = (target: "from" | "to") => {
     setPickerTarget(target); setSearch(""); setPickerVisible(true);
@@ -245,13 +187,6 @@ export default function ConverterScreen() {
     if (numTo !== null) setFromAmount(numTo.toFixed(2));
   };
 
-  const graphTrend =
-    graphPoints.length > 1
-      ? ((graphPoints[graphPoints.length - 1] - graphPoints[0]) / graphPoints[0]) * 100
-      : null;
-  const graphIsUp  = (graphTrend ?? 0) >= 0;
-  const graphColor = graphIsUp ? GREEN : RED;
-
   const handleExchangePress = () => {
     if (numFrom <= 0)     { setExchangeErr(t.exchangeErrZero);    return; }
     if (rate === null)    { setExchangeErr(t.exchangeErrNoRate);   return; }
@@ -270,9 +205,6 @@ export default function ConverterScreen() {
     }, 2000);
   };
 
-  // TradingView symbol — format: FX:EURUSD
-  const tvSymbol = `FX:${fromCurrency.code}${toCurrency.code}`;
-
   const filtered = CURRENCIES.filter(
     (c) =>
       c.code.toLowerCase().includes(search.toLowerCase()) ||
@@ -290,29 +222,12 @@ export default function ConverterScreen() {
   };
 
   return (
-    <SafeAreaView style={[s.safe, ds.bg]}>
-      <StatusBar style={darkMode ? "light" : "dark"} />
+    <Layout
+      onNotificationPress={() => setAlertVisible(true)}
+      onSettingsPress={() => setSettingsVisible(true)}
+    >
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
-        {/* ── Header ── */}
-        <View style={s.header}>
-          <View style={s.headerLeft}>
-            <Text style={[s.greeting, ds.text]} numberOfLines={1} ellipsizeMode="tail">
-              {lang === "fr" ? "Bonjour" : "Hi"} {username || (lang === "fr" ? "Invité" : "Guest")},
-            </Text>
-            <Text style={[s.balance, ds.muted]} numberOfLines={1}>{t.balance} : $6,000,000,213.11</Text>
-          </View>
-          <View style={s.headerIcons}>
-            <TouchableOpacity onPress={() => setAlertVisible(true)} style={s.iconWrap}>
-              <Text style={s.iconEmoji}>🔔</Text>
-              <View style={s.badge} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setSettingsVisible(true)} style={s.iconWrap}>
-              <Text style={s.iconEmoji}>⚙️</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* ── You send ── */}
         <View style={[s.card, ds.card]}>
@@ -370,53 +285,14 @@ export default function ConverterScreen() {
           {rate !== null && (
             <Text style={[s.rateHint, ds.muted]}>{t.rateLabel(fromCurrency.code, rate.toFixed(4), toCurrency.code)}</Text>
           )}
-        </View>
-
-        {/* ── Foresight ── */}
-        <View style={[s.card, ds.card]}>
-          <TouchableOpacity style={s.cardHead} onPress={() => setForesightOpen(!foresightOpen)}>
-            <View>
-              <Text style={[s.cardTitle, ds.text]}>{t.foresightTitle}</Text>
-              <Text style={[s.cardSub, ds.muted]}>{t.foresightSub}</Text>
-            </View>
-            <Text style={[s.chevron, ds.muted]}>{foresightOpen ? "▴" : "▾"}</Text>
-          </TouchableOpacity>
-          {foresightOpen && (
-            <View style={s.foresightBody}>
-              {t.foresightTips.map((tip, i) => (
-                <View key={i} style={s.tipRow}>
-                  <View style={[s.tipDot, { backgroundColor: primary }]} />
-                  <Text style={[s.tipText, ds.muted]}>{tip}</Text>
-                </View>
-              ))}
-            </View>
+          {rateError && !loadingRate && (
+            <TouchableOpacity style={s.retryRow} onPress={fetchRate}>
+              <Text style={s.retryText}>
+                {lang === "fr" ? "⚠️  Taux indisponible — Réessayer ↻" : "⚠️  Rate unavailable — Retry ↻"}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
-
-        {/* ── Graph card (sparkline preview) ── */}
-        <TouchableOpacity style={[s.card, ds.card]} onPress={() => setGraphVisible(true)} activeOpacity={0.85}>
-          <View style={s.graphCardRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.cardTitle, ds.text]}>{t.graph}</Text>
-              <View style={s.trendRow}>
-                {graphTrend !== null ? (
-                  <View style={[s.trendPill, { backgroundColor: graphColor + "22" }]}>
-                    <Text style={[s.trendPillText, { color: graphColor }]}>
-                      {graphIsUp ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}%
-                    </Text>
-                  </View>
-                ) : null}
-                <Text style={[s.cardSub, ds.muted]}>1M · {lang === "fr" ? "Ouvrir TradingView" : "Open TradingView"}</Text>
-              </View>
-            </View>
-            {loadingGraph
-              ? <ActivityIndicator color={primary} size="small" />
-              : graphPoints.length > 1
-                ? <MiniGraph points={graphPoints} color={graphColor} />
-                : <Text style={[s.chevron, ds.muted]}>›</Text>
-            }
-          </View>
-        </TouchableOpacity>
 
         {/* ── Exchange ── */}
         {exchangeErr && (
@@ -431,6 +307,88 @@ export default function ConverterScreen() {
         >
           <Text style={s.exchangeText}>{t.exchange}</Text>
         </TouchableOpacity>
+
+        {/* ══ Watchlist ══ */}
+        <View style={s.wlHeader}>
+          <Text style={[s.sectionTitle, ds.muted, { marginTop: 0 }]}>{t.watchlistTitle}</Text>
+          <TouchableOpacity
+            style={[s.wlAddBtn, { backgroundColor: primary + "18", borderColor: primary + "55" }]}
+            onPress={() => { setWlSearch(""); setWlPickerVisible(true); }}
+            activeOpacity={0.75}
+          >
+            <Text style={[s.wlAddText, { color: primary }]}>+ {t.watchlistAdd}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {watchlist.length === 0 ? (
+          <View style={[s.wlEmpty, { backgroundColor: theme.card }]}>
+            <Text style={{ fontSize: 32, marginBottom: 8 }}>👀</Text>
+            <Text style={[s.wlEmptyText, ds.muted]}>{t.watchlistEmpty}</Text>
+          </View>
+        ) : (
+          watchlist.map((code) => {
+            const wlCur     = CURRENCIES.find((c) => c.code === code);
+            const wlFlag    = wlCur?.flag ?? FLAGS[code] ?? "🏳️";
+            const wlRate    = wlRates[code];
+            const wlName    = apiCurrencies.find((c) => c.code === code)?.name ?? code;
+            return (
+              <TouchableOpacity
+                key={code}
+                style={[s.wlRow, ds.card]}
+                activeOpacity={0.75}
+                onPress={() => navigation.getParent()?.navigate("Detail", { code, name: wlName })}
+              >
+                <View style={[s.pickerCircle, ds.pill]}>
+                  <Text style={s.pickerFlag}>{wlFlag}</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[s.pickerName, ds.text]}>{code}</Text>
+                  {wlRate !== undefined ? (
+                    <Text style={[s.pickerRate, ds.muted]}>
+                      1 {fromCurrency.code} = {wlRate.toFixed(4)} {code}
+                    </Text>
+                  ) : (
+                    <Text style={[s.pickerRate, ds.muted]}>…</Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={[s.wlRemoveBtn, { backgroundColor: "#FF3B3015" }]}
+                  onPress={() => removeFromWatchlist(code)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={{ fontSize: 16, color: "#FF3B30" }}>✕</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            );
+          })
+        )}
+
+        {/* ── Liste des devises (source Frankfurter API) ── */}
+        <Text style={[s.sectionTitle, ds.muted]}>
+          {lang === "fr" ? "Toutes les devises" : "All currencies"}
+        </Text>
+
+        {loadingApiCurrencies ? (
+          <ActivityIndicator color={primary} style={{ marginVertical: 20 }} />
+        ) : (
+          apiCurrencies.map(({ code, name }) => (
+            <TouchableOpacity
+              key={code}
+              style={[s.currencyRow, ds.card]}
+              activeOpacity={0.75}
+              onPress={() => navigation.getParent()?.navigate("Detail", { code, name })}
+            >
+              <View style={[s.pickerCircle, ds.pill]}>
+                <Text style={s.pickerFlag}>{FLAGS[code] ?? "🏳️"}</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[s.pickerName, ds.text]}>{code}</Text>
+                <Text style={[s.pickerRate, ds.muted]} numberOfLines={1}>{name}</Text>
+              </View>
+              <Text style={[s.chevron, ds.muted]}>›</Text>
+            </TouchableOpacity>
+          ))
+        )}
 
       </ScrollView>
 
@@ -468,13 +426,7 @@ export default function ConverterScreen() {
             />
           </View>
 
-          <TouchableOpacity
-            style={[s.settingsRow, { borderBottomColor: theme.border }]}
-            onPress={() => { setSettingsVisible(false); navigation.getParent()?.navigate("SignIn"); }}
-          >
-            <Text style={[s.settingsLabel, ds.text]}>🔓 {lang === "fr" ? "Se déconnecter" : "Sign out"}</Text>
-            <Text style={[s.chevron, ds.muted]}>›</Text>
-          </TouchableOpacity>
+          {/* Bouton sign-out supprimé — accès libre sans auth */}
 
           <Text style={[s.settingsVersion, ds.muted]}>{t.settingsVersion}</Text>
           <TouchableOpacity style={[s.exchangeBtn, { backgroundColor: primary, marginTop: 8 }]} onPress={() => setSettingsVisible(false)}>
@@ -531,84 +483,6 @@ export default function ConverterScreen() {
             }}
           />
         </View>
-      </Modal>
-
-      {/* ══ TradingView Chart (full screen) ══ */}
-      <Modal visible={graphVisible} animationType="slide" transparent={false}>
-        <SafeAreaView style={[s.tvSafe, { backgroundColor: darkMode ? "#131722" : "#F5F5F7" }]}>
-
-          {/* Header bar */}
-          <View style={[s.tvHeader, { borderBottomColor: darkMode ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)" }]}>
-            <TouchableOpacity style={s.tvCloseBtn} onPress={() => setGraphVisible(false)}>
-              <Text style={[s.tvCloseText, ds.text]}>✕</Text>
-            </TouchableOpacity>
-
-            <View style={s.tvTitleBlock}>
-              <Text style={[s.tvPair, ds.text]}>
-                {fromCurrency.flag} {fromCurrency.code} / {toCurrency.flag} {toCurrency.code}
-              </Text>
-              {rate !== null && (
-                <Text style={[s.tvRate, { color: graphColor }]}>{fmtRate(rate)}</Text>
-              )}
-            </View>
-
-            {graphTrend !== null && (
-              <View style={[s.tvBadge, { backgroundColor: graphColor + "22" }]}>
-                <Text style={[s.tvBadgeText, { color: graphColor }]}>
-                  {graphIsUp ? "▲" : "▼"} {Math.abs(graphTrend).toFixed(2)}%
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* TradingView WebView — natif uniquement */}
-          {WebView ? (
-            <WebView
-              style={s.tvWebView}
-              source={{ html: buildTVHtml(tvSymbol, darkMode, lang) }}
-              javaScriptEnabled
-              domStorageEnabled
-              originWhitelist={["*"]}
-              mixedContentMode="always"
-              scrollEnabled={false}
-              startInLoadingState
-              renderLoading={() => (
-                <View style={s.tvLoader}>
-                  <ActivityIndicator color={primary} size="large" />
-                  <Text style={[s.tvLoaderText, ds.muted]}>
-                    {lang === "fr" ? "Chargement du graphique…" : "Loading chart…"}
-                  </Text>
-                </View>
-              )}
-            />
-          ) : (
-            // Fallback Expo Web : bouton pour ouvrir dans le navigateur
-            <View style={s.tvWebFallback}>
-              <Text style={{ fontSize: 48, marginBottom: 16 }}>📈</Text>
-              <Text style={[s.tvPair, ds.text, { marginBottom: 6, textAlign: "center" }]}>
-                {fromCurrency.code} / {toCurrency.code}
-              </Text>
-              {rate !== null && (
-                <Text style={[s.tvRate, { color: graphColor, marginBottom: 24, textAlign: "center" }]}>
-                  {fmtRate(rate)}
-                </Text>
-              )}
-              <TouchableOpacity
-                style={[s.exchangeBtn, { backgroundColor: primary, paddingHorizontal: 36 }]}
-                onPress={() => Linking.openURL(`https://www.tradingview.com/symbols/${fromCurrency.code}${toCurrency.code}/`)}
-              >
-                <Text style={s.exchangeText}>
-                  {lang === "fr" ? "Ouvrir sur TradingView ↗" : "Open on TradingView ↗"}
-                </Text>
-              </TouchableOpacity>
-              <Text style={[s.tvLoaderText, ds.muted, { marginTop: 16, textAlign: "center" }]}>
-                {lang === "fr"
-                  ? "Le graphique interactif nécessite l'app mobile"
-                  : "Interactive chart requires the mobile app"}
-              </Text>
-            </View>
-          )}
-        </SafeAreaView>
       </Modal>
 
       {/* ══ Confirmation échange ══ */}
@@ -679,6 +553,53 @@ export default function ConverterScreen() {
         </View>
       </Modal>
 
+      {/* ══ Watchlist picker ══ */}
+      <Modal visible={wlPickerVisible} animationType="slide" transparent>
+        <Pressable style={s.overlay} onPress={() => setWlPickerVisible(false)} />
+        <View style={[s.sheet, ds.sheet]}>
+          <View style={s.handle} />
+          <Text style={[s.sheetTitle, ds.text]}>{t.watchlistAdd}</Text>
+          <TextInput
+            style={[s.searchBox, ds.inputBg, ds.text]}
+            value={wlSearch}
+            onChangeText={setWlSearch}
+            placeholder={t.searchCurrency}
+            placeholderTextColor={theme.muted}
+            autoFocus
+          />
+          <FlatList
+            data={CURRENCIES.filter((c) =>
+              c.code.toLowerCase().includes(wlSearch.toLowerCase()) ||
+              c.name[lang].toLowerCase().includes(wlSearch.toLowerCase())
+            )}
+            keyExtractor={(c) => c.code}
+            style={{ maxHeight: 360 }}
+            renderItem={({ item }) => {
+              const inList = isInWatchlist(item.code);
+              return (
+                <TouchableOpacity
+                  style={[s.pickerRow, { borderBottomColor: theme.border }]}
+                  onPress={() => { addToWatchlist(item.code); setWlPickerVisible(false); }}
+                  disabled={inList}
+                  activeOpacity={inList ? 1 : 0.7}
+                >
+                  <View style={[s.pickerCircle, ds.pill]}>
+                    <Text style={s.pickerFlag}>{item.flag}</Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={[s.pickerName, ds.text]}>{item.name[lang]} ({item.code})</Text>
+                  </View>
+                  {inList
+                    ? <Text style={{ color: primary, fontWeight: "700", fontSize: 16 }}>★</Text>
+                    : <Text style={[s.chevron, ds.muted]}>+</Text>
+                  }
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      </Modal>
+
       {/* ══ Alert ══ */}
       <Modal visible={alertVisible} animationType="fade" transparent>
         <Pressable style={s.alertOverlay} onPress={() => { setAlertVisible(false); setNotifyTarget(null); }}>
@@ -692,7 +613,7 @@ export default function ConverterScreen() {
         </Pressable>
       </Modal>
 
-    </SafeAreaView>
+    </Layout>
   );
 }
 
@@ -729,18 +650,7 @@ const s = StyleSheet.create({
   swapBtn:  { alignSelf: "center", width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginVertical: 2, marginBottom: 10 },
   swapIcon: { fontSize: 20, color: "#FFF" },
 
-  cardHead:      { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  cardTitle:     { fontSize: 16, fontWeight: "700" },
-  cardSub:       { fontSize: 12, marginTop: 2 },
-  chevron:       { fontSize: 18 },
-  foresightBody: { marginTop: 14, gap: 8 },
-  tipRow:        { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  tipDot:        { width: 6, height: 6, borderRadius: 3, marginTop: 5 },
-  tipText:       { flex: 1, fontSize: 13, lineHeight: 18 },
-  graphCardRow:  { flexDirection: "row", alignItems: "center" },
-  trendRow:      { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
-  trendPill:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  trendPillText: { fontSize: 12, fontWeight: "700" },
+  chevron: { fontSize: 18 },
 
   exchangeBtn:  { borderRadius: 16, paddingVertical: 18, alignItems: "center", marginTop: 6 },
   exchangeText: { fontSize: 17, fontWeight: "700", color: "#FFF" },
@@ -777,6 +687,9 @@ const s = StyleSheet.create({
   exchangeErrBanner: { backgroundColor: "#FF3B3015", borderRadius: 12, padding: 12, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: RED },
   exchangeErrText:   { fontSize: 13, color: RED, fontWeight: "500" },
 
+  retryRow:  { marginTop: 8, paddingVertical: 4 },
+  retryText: { fontSize: 13, color: RED, fontWeight: "600" },
+
   confirmOverlay:  { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 },
   confirmCard:     { borderRadius: 24, padding: 24, width: "100%" },
   confirmTitle:    { fontSize: 20, fontWeight: "700", marginBottom: 20 },
@@ -804,4 +717,57 @@ const s = StyleSheet.create({
   langToggle:     { flexDirection: "row", gap: 8 },
   langBtn:        { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   langBtnText:    { fontSize: 14, fontWeight: "600" },
+
+  // ── Currency list ──
+  sectionTitle: {
+    fontSize:        12,
+    fontWeight:      "700",
+    textTransform:   "uppercase",
+    letterSpacing:   0.9,
+    marginTop:       32,
+    marginBottom:    10,
+  },
+  currencyRow: {
+    flexDirection: "row",
+    alignItems:    "center",
+    padding:       14,
+    borderRadius:  16,
+    marginBottom:  6,
+  },
+  // ── Watchlist ──
+  wlHeader: {
+    flexDirection:  "row",
+    alignItems:     "center",
+    justifyContent: "space-between",
+    marginTop:      32,
+    marginBottom:   10,
+  },
+  wlAddBtn: {
+    borderRadius:      20,
+    borderWidth:        1,
+    paddingHorizontal: 12,
+    paddingVertical:    6,
+  },
+  wlAddText:    { fontSize: 12, fontWeight: "700" },
+  wlRow: {
+    flexDirection: "row",
+    alignItems:    "center",
+    padding:       14,
+    borderRadius:  16,
+    marginBottom:  6,
+  },
+  wlRemoveBtn: {
+    width:        32,
+    height:       32,
+    borderRadius: 16,
+    alignItems:   "center",
+    justifyContent: "center",
+  },
+  wlEmpty: {
+    borderRadius:  16,
+    padding:       24,
+    alignItems:    "center",
+    marginBottom:  8,
+  },
+  wlEmptyText: { fontSize: 14 },
 });

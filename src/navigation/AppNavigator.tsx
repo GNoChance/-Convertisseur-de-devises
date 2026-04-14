@@ -1,109 +1,310 @@
+import { Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { createBottomTabNavigator }   from "@react-navigation/bottom-tabs";
-import { Text, View, Platform }       from "react-native";
+import { createBottomTabNavigator, BottomTabBarProps } from "@react-navigation/bottom-tabs";
 
 import SignUpScreen    from "../screens/SignUpScreen";
 import SignInScreen    from "../screens/SignInScreen";
 import ConverterScreen from "../screens/ConverterScreen";
+import GraphScreen     from "../screens/GraphScreen";
 import ProfileScreen   from "../screens/ProfileScreen";
+import DetailScreen    from "../screens/DetailScreen";
 import { useApp }      from "../context/AppContext";
 import { T }           from "../i18n/translations";
 
-// ─── Param lists ──────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type RootStackParamList = {
-  SignUp: undefined;
-  SignIn: undefined;
-  Main:   undefined;
+  SignUp:  undefined;
+  SignIn:  undefined;
+  Main:    undefined;
+  Detail:  { code: string; name: string };
 };
 
 export type TabParamList = {
   Converter: undefined;
+  Graph:     undefined;
   Profile:   undefined;
 };
 
-// ─── Tab icons ────────────────────────────────────────────────────────────────
+// ─── Constantes ───────────────────────────────────────────────────────────────
 
-function TabIcon({ name, focused, color }: { name: string; focused: boolean; color: string }) {
-  const icons: Record<string, { active: string; inactive: string }> = {
-    Converter: { active: "💱", inactive: "💱" },
-    Profile:   { active: "👤", inactive: "👤" },
+export const SIDEBAR_EXPANDED  = 220;
+export const SIDEBAR_COLLAPSED = 64;
+const BREAKPOINT = 768;
+
+const ICONS: Record<string, string> = {
+  Converter: "💱",
+  Graph:     "📈",
+  Profile:   "👤",
+};
+
+// ─── Smart Tab Bar ─────────────────────────────────────────────────────────────
+
+function SmartTabBar({ state, navigation }: BottomTabBarProps) {
+  const { theme, lang, darkMode, sidebarCollapsed, setSidebarCollapsed } = useApp();
+  const { width }  = useWindowDimensions();
+  const isDesktop  = Platform.OS === "web" && width >= BREAKPOINT;
+  const t          = T[lang];
+
+  const labels: Record<string, string> = {
+    Converter: t.navHome,
+    Graph:     t.navChart,
+    Profile:   t.navProfile,
   };
+
+  // ── Sidebar desktop ────────────────────────────────────────────────────────
+  if (isDesktop) {
+    const W = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
+
+    return (
+      <View style={[
+        sb.container,
+        {
+          width:            W,
+          backgroundColor:  theme.card,
+          borderRightColor: theme.border,
+        },
+      ]}>
+        {/* ── Header : logo + bouton collapse ── */}
+        <View style={[sb.headerRow, sidebarCollapsed && sb.headerRowCollapsed]}>
+          {!sidebarCollapsed && (
+            <View style={sb.logoRow}>
+              <View style={[sb.logoIcon, { backgroundColor: theme.primary + "22" }]}>
+                <Text style={{ fontSize: 18 }}>💱</Text>
+              </View>
+              <Text style={[sb.logoLabel, { color: theme.text }]}>DeviseX</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={[sb.collapseBtn, { backgroundColor: theme.input }]}
+            onPress={() => setSidebarCollapsed(!sidebarCollapsed)}
+            activeOpacity={0.7}
+          >
+            <Text style={[sb.collapseIcon, { color: theme.muted }]}>
+              {sidebarCollapsed ? "›" : "‹"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Nav items ── */}
+        <View style={sb.navList}>
+          {state.routes.map((route, i) => {
+            const focused = state.index === i;
+            const label   = labels[route.name] ?? route.name;
+            const icon    = ICONS[route.name] ?? "●";
+
+            return (
+              <TouchableOpacity
+                key={route.key}
+                style={[
+                  sb.navItem,
+                  sidebarCollapsed && sb.navItemCollapsed,
+                  focused && { backgroundColor: theme.primary + "18" },
+                ]}
+                onPress={() => navigation.navigate(route.name)}
+                activeOpacity={0.75}
+              >
+                <View style={[
+                  sb.navIcon,
+                  focused && { backgroundColor: theme.primary + "28" },
+                ]}>
+                  <Text style={{ fontSize: 18 }}>{icon}</Text>
+                </View>
+
+                {!sidebarCollapsed && (
+                  <Text style={[
+                    sb.navLabel,
+                    { color: focused ? theme.primary : theme.muted },
+                    focused && { fontWeight: "700" },
+                  ]}>
+                    {label}
+                  </Text>
+                )}
+
+                {/* Point actif — visible même en mode réduit */}
+                {focused && !sidebarCollapsed && (
+                  <View style={[sb.activePip, { backgroundColor: theme.primary }]} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* ── Footer ── */}
+        {!sidebarCollapsed && (
+          <View style={[sb.footer, { borderTopColor: theme.border }]}>
+            <Text style={[sb.footerText, { color: theme.muted }]}>
+              {darkMode ? "🌙" : "☀️"}  v1.0.0
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // ── Bottom bar mobile ──────────────────────────────────────────────────────
   return (
-    <View style={{ alignItems: "center", justifyContent: "center" }}>
-      <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.45 }}>{icons[name]?.active ?? "●"}</Text>
-      {focused && (
-        <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: color, marginTop: 3 }} />
-      )}
+    <View style={[
+      bb.container,
+      {
+        backgroundColor: theme.card,
+        borderTopColor:  theme.border,
+        height:          Platform.OS === "ios" ? 82 : 62,
+        paddingBottom:   Platform.OS === "ios" ? 24 : 8,
+        ...Platform.select({
+          ios:     { shadowColor:"#000", shadowOffset:{width:0,height:-2}, shadowOpacity:0.06, shadowRadius:8 },
+          android: { elevation:8 },
+          default: {},
+        }),
+      },
+    ]}>
+      {state.routes.map((route, i) => {
+        const focused = state.index === i;
+        return (
+          <TouchableOpacity
+            key={route.key}
+            style={bb.item}
+            onPress={() => navigation.navigate(route.name)}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.4 }}>
+              {ICONS[route.name] ?? "●"}
+            </Text>
+            <Text style={[
+              bb.label,
+              { color: focused ? theme.primary : theme.muted },
+              focused && { fontWeight: "700" },
+            ]}>
+              {labels[route.name] ?? route.name}
+            </Text>
+            {focused && <View style={[bb.dot, { backgroundColor: theme.primary }]} />}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
 
-// ─── Tab navigator ────────────────────────────────────────────────────────────
+// ─── Main Tabs ────────────────────────────────────────────────────────────────
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
 function MainTabs() {
-  const { theme, lang } = useApp();
-  const t = T[lang];
+  const { width }          = useWindowDimensions();
+  const { sidebarCollapsed } = useApp();
+  const isDesktop          = Platform.OS === "web" && width >= BREAKPOINT;
+
+  const sidebarW = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED;
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarShowLabel: true,
-        tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: theme.muted,
-        tabBarStyle: {
-          backgroundColor: theme.card,
-          borderTopColor:  theme.border,
-          borderTopWidth:  1,
-          height:          Platform.OS === "ios" ? 82 : 62,
-          paddingBottom:   Platform.OS === "ios" ? 24 : 8,
-          paddingTop:      8,
-          ...Platform.select({
-            ios:     { shadowColor: "#000", shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.06, shadowRadius: 8 },
-            android: { elevation: 8 },
-            default: {},
-          }),
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "600",
-          marginTop: 2,
-        },
-        tabBarIcon: ({ focused, color }) => (
-          <TabIcon name={route.name} focused={focused} color={color} />
-        ),
-      })}
+      tabBar={(props) => <SmartTabBar {...props} />}
+      // @ts-ignore — sceneStyle est valide en React Navigation v7
+      sceneStyle={isDesktop ? { marginLeft: sidebarW } : undefined}
+      screenOptions={{ headerShown: false }}
     >
-      <Tab.Screen
-        name="Converter"
-        component={ConverterScreen}
-        options={{ tabBarLabel: lang === "fr" ? "Accueil" : "Home" }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ tabBarLabel: lang === "fr" ? "Profil" : "Profile" }}
-      />
+      <Tab.Screen name="Converter" component={ConverterScreen} />
+      <Tab.Screen name="Graph"     component={GraphScreen} />
+      <Tab.Screen name="Profile"   component={ProfileScreen} />
     </Tab.Navigator>
   );
 }
 
-// ─── Root stack ───────────────────────────────────────────────────────────────
+// ─── Root Stack ───────────────────────────────────────────────────────────────
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   return (
+    // L'app démarre toujours en mode invité (Main).
+    // La connexion est optionnelle depuis l'onglet Profil.
     <Stack.Navigator
       initialRouteName="Main"
       screenOptions={{ headerShown: false, animation: "slide_from_right" }}
     >
-      <Stack.Screen name="SignUp" component={SignUpScreen} />
-      <Stack.Screen name="SignIn" component={SignInScreen} />
-      <Stack.Screen name="Main"   component={MainTabs} />
+      <Stack.Screen name="Main"    component={MainTabs} />
+      <Stack.Screen name="Detail"  component={DetailScreen} />
+      <Stack.Screen name="SignIn"  component={SignInScreen} />
+      <Stack.Screen name="SignUp"  component={SignUpScreen} />
     </Stack.Navigator>
   );
 }
+
+// ─── Styles — Sidebar ─────────────────────────────────────────────────────────
+
+const sb = StyleSheet.create({
+  container: {
+    position:         "absolute",
+    top:              0,
+    left:             0,
+    bottom:           0,
+    borderRightWidth: 1,
+    paddingTop:       20,
+    zIndex:           100,
+    // Transition douce sur web
+    ...(Platform.OS === "web" ? ({ transition: "width 0.2s ease" } as any) : {}),
+  },
+
+  // Header (logo + bouton collapse)
+  headerRow: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    justifyContent:    "space-between",
+    paddingHorizontal: 12,
+    paddingBottom:     20,
+  },
+  headerRowCollapsed: {
+    justifyContent: "center",
+  },
+  logoRow: {
+    flexDirection: "row",
+    alignItems:    "center",
+    gap:           10,
+    flex:          1,
+  },
+  logoIcon:  { width:36, height:36, borderRadius:10, alignItems:"center", justifyContent:"center" },
+  logoLabel: { fontSize:17, fontWeight:"800" },
+
+  // Bouton collapse ‹ / ›
+  collapseBtn: {
+    width:          28,
+    height:         28,
+    borderRadius:   8,
+    alignItems:     "center",
+    justifyContent: "center",
+    flexShrink:     0,
+  },
+  collapseIcon: { fontSize:16, fontWeight:"700", lineHeight:20 },
+
+  // Nav
+  navList: { flex:1, paddingHorizontal:8, gap:4 },
+  navItem: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    gap:               10,
+    borderRadius:      12,
+    paddingVertical:   10,
+    paddingHorizontal: 10,
+    position:          "relative",
+  },
+  navItemCollapsed: {
+    justifyContent: "center",
+    paddingHorizontal: 0,
+  },
+  navIcon:   { width:36, height:36, borderRadius:10, alignItems:"center", justifyContent:"center", flexShrink:0 },
+  navLabel:  { fontSize:14, fontWeight:"500", flex:1 },
+  activePip: { position:"absolute", right:10, width:6, height:6, borderRadius:3 },
+
+  // Footer
+  footer:     { borderTopWidth:1, paddingHorizontal:16, paddingVertical:12 },
+  footerText: { fontSize:11 },
+});
+
+// ─── Styles — Bottom bar ──────────────────────────────────────────────────────
+
+const bb = StyleSheet.create({
+  container: { flexDirection:"row", borderTopWidth:1, paddingTop:8 },
+  item:      { flex:1, alignItems:"center", justifyContent:"center", gap:3 },
+  label:     { fontSize:11 },
+  dot:       { position:"absolute", bottom:0, width:4, height:4, borderRadius:2 },
+});

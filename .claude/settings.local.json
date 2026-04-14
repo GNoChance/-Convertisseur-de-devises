@@ -15,7 +15,9 @@
       "Bash(npx kill-port:*)",
       "Bash(netstat -ano)",
       "Bash(findstr :8081)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(curl -s \"https://api.frankfurter.app/latest?from=EUR&to=USD\")",
+      "Bash(node -e \"const pkg = require\\('./node_modules/lightweight-charts/package.json'\\); console.log\\(pkg.version\\)\")"
     ]
   }
 }

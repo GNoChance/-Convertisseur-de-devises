@@ -34,7 +34,7 @@ function validate(
   email: string,
   password: string,
   confirm: string,
-  t: typeof T["fr"]
+  t: typeof T["fr"] | typeof T["en"]
 ): FormErrors {
   const errors: FormErrors = {};
   if (!username.trim())
@@ -59,7 +59,7 @@ function validate(
 type Nav = NativeStackNavigationProp<RootStackParamList, "SignUp">;
 
 export default function SignUpScreen() {
-  const { theme, lang, setUsername: setAppUsername } = useApp();
+  const { theme, lang, login } = useApp();
   const navigation      = useNavigation<Nav>();
   const t               = T[lang];
 
@@ -85,10 +85,12 @@ export default function SignUpScreen() {
     setIsLoading(true);
     try {
       const user = await signUp({ username: username.trim(), email: email.trim(), password });
-      setAppUsername(user.username);
       setSuccess(true);
-      // Navigate to Converter after short delay
-      setTimeout(() => navigation.replace("Main"), 1200);
+      // Connexion automatique + retour au Profil
+      setTimeout(() => {
+        login(user.email, user.username);
+        navigation.goBack();
+      }, 1200);
     } catch (err) {
       const authErr = err as AuthError;
       if (authErr.field === "email") {
@@ -105,14 +107,24 @@ export default function SignUpScreen() {
     <SafeAreaView style={[s.safe, { backgroundColor: theme.bg }]}>
       <KeyboardAvoidingView
         style={s.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 30}
       >
         <ScrollView
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          bounces={false}
         >
+          {/* ── Bouton retour ── */}
+          <TouchableOpacity
+            style={s.backBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.backText, { color: theme.muted }]}>‹ {lang === "fr" ? "Retour" : "Back"}</Text>
+          </TouchableOpacity>
+
           {/* ── Header ── */}
           <View style={s.headerBlock}>
             <View style={[s.logoWrap, { backgroundColor: theme.primary + "18" }]}>
@@ -244,9 +256,12 @@ function PasswordStrength({ password, theme }: { password: string; theme: typeof
 const s = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 100 },
 
-  headerBlock: { alignItems: "center", paddingTop: 32, paddingBottom: 28 },
+  backBtn:  { paddingTop: 16, paddingBottom: 4 },
+  backText: { fontSize: 16, fontWeight: "600" },
+
+  headerBlock: { alignItems: "center", paddingTop: 16, paddingBottom: 28 },
   logoWrap:    { width: 72, height: 72, borderRadius: 24, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   logo:        { fontSize: 36 },
   title:       { fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },

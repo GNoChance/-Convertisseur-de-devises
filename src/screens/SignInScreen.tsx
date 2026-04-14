@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -22,14 +23,16 @@ import { RootStackParamList } from "../navigation/AppNavigator";
 type Nav = NativeStackNavigationProp<RootStackParamList, "SignIn">;
 
 export default function SignInScreen() {
-  const { theme, lang, setUsername } = useApp();
-  const navigation      = useNavigation<Nav>();
-  const t               = T[lang];
+  const { theme, lang, login } = useApp();
+  const navigation             = useNavigation<Nav>();
+  const t                      = T[lang];
 
   const [email,     setEmail]     = useState("");
   const [password,  setPassword]  = useState("");
   const [error,     setError]     = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const scrollRef   = useRef<ScrollView>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const handleSubmit = async () => {
     if (!email.trim() || !password) {
@@ -40,8 +43,9 @@ export default function SignInScreen() {
     setIsLoading(true);
     try {
       const user = await signIn(email.trim(), password);
-      setUsername(user.username);
-      navigation.replace("Main");
+      login(user.email, user.username);
+      // Retour au Profil (ou à l'écran précédent)
+      navigation.goBack();
     } catch (err) {
       const authErr = err as AuthError;
       setError(authErr.message ?? t.errGeneric);
@@ -54,14 +58,25 @@ export default function SignInScreen() {
     <SafeAreaView style={[s.safe, { backgroundColor: theme.bg }]}>
       <KeyboardAvoidingView
         style={s.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 30}
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          bounces={false}
         >
+          {/* ── Bouton retour ── */}
+          <TouchableOpacity
+            style={s.backBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.backText, { color: theme.muted }]}>‹ {lang === "fr" ? "Retour" : "Back"}</Text>
+          </TouchableOpacity>
+
           {/* ── Header ── */}
           <View style={s.headerBlock}>
             <View style={[s.logoWrap, { backgroundColor: theme.primary + "18" }]}>
@@ -97,10 +112,17 @@ export default function SignInScreen() {
               onSubmitEditing={handleSubmit}
             />
 
-            {/* Demo hint */}
+            {/* Hints */}
             <Text style={[s.hint, { color: theme.muted }]}>
               💡 demo@example.com / password123
             </Text>
+            <View style={[s.infoBanner, { backgroundColor: theme.primary + "12", borderColor: theme.primary + "40" }]}>
+              <Text style={[s.infoText, { color: theme.primary }]}>
+                🔐 {lang === "fr"
+                  ? "Chaque compte ne peut être utilisé qu'une seule fois."
+                  : "Each account can only be used once."}
+              </Text>
+            </View>
 
             <CustomButton
               label={t.signIn}
@@ -127,9 +149,12 @@ export default function SignInScreen() {
 const s = StyleSheet.create({
   safe:   { flex: 1 },
   flex:   { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 80 },
 
-  headerBlock: { alignItems: "center", paddingTop: 32, paddingBottom: 28 },
+  backBtn:  { paddingTop: 16, paddingBottom: 4 },
+  backText: { fontSize: 16, fontWeight: "600" },
+
+  headerBlock: { alignItems: "center", paddingTop: 16, paddingBottom: 28 },
   logoWrap:    { width: 72, height: 72, borderRadius: 24, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   logo:        { fontSize: 36 },
   title:       { fontSize: 28, fontWeight: "800", letterSpacing: -0.5 },
@@ -155,7 +180,9 @@ const s = StyleSheet.create({
   },
   errorText: { fontSize: 14, color: "#FF3B30", fontWeight: "500" },
 
-  hint:       { fontSize: 12, textAlign: "center", marginBottom: 12, fontStyle: "italic" },
+  hint:       { fontSize: 12, textAlign: "center", marginBottom: 8, fontStyle: "italic" },
+  infoBanner: { borderRadius: 10, borderWidth: 1, padding: 10, marginBottom: 12 },
+  infoText:   { fontSize: 12, fontWeight: "600", textAlign: "center" },
   footer:     { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 24 },
   footerText: { fontSize: 14 },
   footerLink: { fontSize: 14, fontWeight: "700" },
