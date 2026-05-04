@@ -2,22 +2,24 @@ import { Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator, BottomTabBarProps } from "@react-navigation/bottom-tabs";
 
-import SignUpScreen    from "../screens/SignUpScreen";
-import SignInScreen    from "../screens/SignInScreen";
-import ConverterScreen from "../screens/ConverterScreen";
-import GraphScreen     from "../screens/GraphScreen";
-import ProfileScreen   from "../screens/ProfileScreen";
-import DetailScreen    from "../screens/DetailScreen";
-import { useApp }      from "../context/AppContext";
-import { T }           from "../i18n/translations";
+import SignUpScreen      from "../screens/SignUpScreen";
+import SignInScreen      from "../screens/SignInScreen";
+import ConverterScreen   from "../screens/ConverterScreen";
+import GraphScreen       from "../screens/GraphScreen";
+import ProfileScreen     from "../screens/ProfileScreen";
+import DetailScreen      from "../screens/DetailScreen";
+import OnboardingScreen  from "../screens/OnboardingScreen";
+import { useApp }        from "../context/AppContext";
+import { T }             from "../i18n/translations";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type RootStackParamList = {
-  SignUp:  undefined;
-  SignIn:  undefined;
-  Main:    undefined;
-  Detail:  { code: string; name: string };
+  Onboarding: undefined;
+  SignUp:     undefined;
+  SignIn:     undefined;
+  Main:       undefined;
+  Detail:     { code: string; name: string };
 };
 
 export type TabParamList = {
@@ -215,13 +217,22 @@ function MainTabs() {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
+  const { hasOnboarded } = useApp();
+
   return (
-    // L'app démarre toujours en mode invité (Main).
-    // La connexion est optionnelle depuis l'onglet Profil.
+    // Si l'utilisateur n'a pas fait l'onboarding, on démarre dessus.
+    // Sinon on va directement sur Main (mode invité).
     <Stack.Navigator
-      initialRouteName="Main"
+      initialRouteName={hasOnboarded ? "Main" : "Onboarding"}
       screenOptions={{ headerShown: false, animation: "slide_from_right" }}
     >
+      {!hasOnboarded && (
+        <Stack.Screen
+          name="Onboarding"
+          component={OnboardingScreen}
+          options={{ animation: "fade" }}
+        />
+      )}
       <Stack.Screen name="Main"    component={MainTabs} />
       <Stack.Screen name="Detail"  component={DetailScreen} />
       <Stack.Screen name="SignIn"  component={SignInScreen} />

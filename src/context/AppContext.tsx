@@ -70,6 +70,9 @@ interface AppContextValue {
   currentUserEmail: string;
   login:            (email: string, name: string) => void;
   logout:           () => void;
+  // Onboarding
+  hasOnboarded:    boolean;
+  setHasOnboarded: (v: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue>({} as AppContextValue);
@@ -92,6 +95,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
     loadLS<boolean>("sidebarCollapsed", false)
   );
+
+  // ── Onboarding ──────────────────────────────────────────────────────────────
+  const [hasOnboarded, _setHasOnboarded] = useState<boolean>(() =>
+    loadLS<boolean>("dx_onboarded", false)
+  );
+  const setHasOnboarded = (v: boolean) => {
+    _setHasOnboarded(v);
+    saveLS("dx_onboarded", v);
+  };
 
   // ── Auth ────────────────────────────────────────────────────────────────────
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() =>
@@ -154,6 +166,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notificationsEnabled, setNotificationsEnabled,
       sidebarCollapsed, setSidebarCollapsed,
       isLoggedIn, currentUserEmail, login, logout,
+      hasOnboarded, setHasOnboarded,
     }}>
       {children}
     </AppContext.Provider>
