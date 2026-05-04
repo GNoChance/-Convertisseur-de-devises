@@ -98,4 +98,4 @@ fetch("https://ton-api.com/auth/register", { method: "POST", body: ... });
 
 ## 📄 Licence
 
-MIT
+MITnjj
