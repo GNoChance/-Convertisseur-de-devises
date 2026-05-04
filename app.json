@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ConvertisseurDevises",
-    "slug": "ConvertisseurDevises",
+    "slug": "convertisseur",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -25,6 +25,18 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "bf43bd65-89c5-41b3-9caf-34db43deb63e"
+      }
+    },
+    "owner": "convertisseur",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/bf43bd65-89c5-41b3-9caf-34db43deb63e"
     }
   }
 }
