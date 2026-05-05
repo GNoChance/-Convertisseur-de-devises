@@ -20,30 +20,30 @@ import { TabParamList } from "../navigation/AppNavigator";
 import LayoutComponent from "../components/Layout";
 
 const CURRENCIES = [
-  { code: "ILS", flag: "🇮🇱", name: { fr: "Shekel israélien", en: "Israeli Shekel" } },
-  { code: "USD", flag: "🇺🇸", name: { fr: "Dollar américain", en: "US Dollar" } },
-  { code: "EUR", flag: "🇪🇺", name: { fr: "Euro", en: "Euro" } },
-  { code: "GBP", flag: "🇬🇧", name: { fr: "Livre sterling", en: "British Pound" } },
-  { code: "JPY", flag: "🇯🇵", name: { fr: "Yen japonais", en: "Japanese Yen" } },
-  { code: "CHF", flag: "🇨🇭", name: { fr: "Franc suisse", en: "Swiss Franc" } },
-  { code: "CAD", flag: "🇨🇦", name: { fr: "Dollar canadien", en: "Canadian Dollar" } },
-  { code: "AUD", flag: "🇦🇺", name: { fr: "Dollar australien", en: "Australian Dollar" } },
-  { code: "CNY", flag: "🇨🇳", name: { fr: "Yuan chinois", en: "Chinese Yuan" } },
-  { code: "MAD", flag: "🇲🇦", name: { fr: "Dirham marocain", en: "Moroccan Dirham" } },
-  { code: "AED", flag: "🇦🇪", name: { fr: "Dirham des EAU", en: "UAE Dirham" } },
-  { code: "BRL", flag: "🇧🇷", name: { fr: "Réal brésilien", en: "Brazilian Real" } },
-  { code: "INR", flag: "🇮🇳", name: { fr: "Roupie indienne", en: "Indian Rupee" } },
-  { code: "KRW", flag: "🇰🇷", name: { fr: "Won sud-coréen", en: "South Korean Won" } },
-  { code: "MXN", flag: "🇲🇽", name: { fr: "Peso mexicain", en: "Mexican Peso" } },
-  { code: "NOK", flag: "🇳🇴", name: { fr: "Couronne norvégienne", en: "Norwegian Krone" } },
-  { code: "NZD", flag: "🇳🇿", name: { fr: "Dollar néo-zélandais", en: "New Zealand Dollar" } },
-  { code: "PLN", flag: "🇵🇱", name: { fr: "Zloty polonais", en: "Polish Zloty" } },
-  { code: "SEK", flag: "🇸🇪", name: { fr: "Couronne suédoise", en: "Swedish Krona" } },
-  { code: "SGD", flag: "🇸🇬", name: { fr: "Dollar de Singapour", en: "Singapore Dollar" } },
-  { code: "TRY", flag: "🇹🇷", name: { fr: "Livre turque", en: "Turkish Lira" } },
-  { code: "ZAR", flag: "🇿🇦", name: { fr: "Rand sud-africain", en: "South African Rand" } },
-  { code: "HKD", flag: "🇭🇰", name: { fr: "Dollar de HK", en: "Hong Kong Dollar" } },
-  { code: "DKK", flag: "🇩🇰", name: { fr: "Couronne danoise", en: "Danish Krone" } },
+  { code: "ILS", flag: "🇮🇱", name: { fr: "Shekel israélien", en: "Israeli Shekel" }, symbol: "₪" },
+  { code: "USD", flag: "🇺🇸", name: { fr: "Dollar américain", en: "US Dollar" }, symbol: "$" },
+  { code: "EUR", flag: "🇪🇺", name: { fr: "Euro", en: "Euro" }, symbol: "€" },
+  { code: "GBP", flag: "🇬🇧", name: { fr: "Livre sterling", en: "British Pound" }, symbol: "£" },
+  { code: "JPY", flag: "🇯🇵", name: { fr: "Yen japonais", en: "Japanese Yen" }, symbol: "¥" },
+  { code: "CHF", flag: "🇨🇭", name: { fr: "Franc suisse", en: "Swiss Franc" }, symbol: "Fr" },
+  { code: "CAD", flag: "🇨🇦", name: { fr: "Dollar canadien", en: "Canadian Dollar" }, symbol: "CA$" },
+  { code: "AUD", flag: "🇦🇺", name: { fr: "Dollar australien", en: "Australian Dollar" }, symbol: "A$" },
+  { code: "CNY", flag: "🇨🇳", name: { fr: "Yuan chinois", en: "Chinese Yuan" }, symbol: "¥" },
+  { code: "MAD", flag: "🇲🇦", name: { fr: "Dirham marocain", en: "Moroccan Dirham" }, symbol: "د.م." },
+  { code: "AED", flag: "🇦🇪", name: { fr: "Dirham des EAU", en: "UAE Dirham" }, symbol: "د.إ" },
+  { code: "BRL", flag: "🇧🇷", name: { fr: "Réal brésilien", en: "Brazilian Real" }, symbol: "R$" },
+  { code: "INR", flag: "🇮🇳", name: { fr: "Roupie indienne", en: "Indian Rupee" }, symbol: "₹" },
+  { code: "KRW", flag: "🇰🇷", name: { fr: "Won sud-coréen", en: "South Korean Won" }, symbol: "₩" },
+  { code: "MXN", flag: "🇲🇽", name: { fr: "Peso mexicain", en: "Mexican Peso" }, symbol: "$" },
+  { code: "NOK", flag: "🇳🇴", name: { fr: "Couronne norvégienne", en: "Norwegian Krone" }, symbol: "kr" },
+  { code: "NZD", flag: "🇳🇿", name: { fr: "Dollar néo-zélandais", en: "New Zealand Dollar" }, symbol: "NZ$" },
+  { code: "PLN", flag: "🇵🇱", name: { fr: "Zloty polonais", en: "Polish Zloty" }, symbol: "zł" },
+  { code: "SEK", flag: "🇸🇪", name: { fr: "Couronne suédoise", en: "Swedish Krona" }, symbol: "kr" },
+  { code: "SGD", flag: "🇸🇬", name: { fr: "Dollar de Singapour", en: "Singapore Dollar" }, symbol: "S$" },
+  { code: "TRY", flag: "🇹🇷", name: { fr: "Livre turque", en: "Turkish Lira" }, symbol: "₺" },
+  { code: "ZAR", flag: "🇿🇦", name: { fr: "Rand sud-africain", en: "South African Rand" }, symbol: "R" },
+  { code: "HKD", flag: "🇭🇰", name: { fr: "Dollar de HK", en: "Hong Kong Dollar" }, symbol: "HK$" },
+  { code: "DKK", flag: "🇩🇰", name: { fr: "Couronne danoise", en: "Danish Krone" }, symbol: "kr" },
 ];
 
 export default function ListScreen() {
@@ -92,7 +92,7 @@ export default function ListScreen() {
       <Text style={[s.title, { color: theme.text }]}>Cours du marché</Text>
       
       <View style={s.baseRow}>
-        <Text style={[s.subtitle, { color: theme.muted }]}>Base : 1 {base}</Text>
+        <Text style={[s.subtitle, { color: theme.muted }]}>Base : 1 {baseCurrency.symbol || baseCurrency.code}</Text>
         <TouchableOpacity style={[s.changeBtn, { backgroundColor: theme.primary }]} onPress={() => setPickerVisible(true)}>
           <Text style={{ color: "#FFF", fontSize: 12, fontWeight: "700" }}>{lang === "fr" ? "Changer" : "Change"}</Text>
         </TouchableOpacity>
@@ -130,7 +130,7 @@ export default function ListScreen() {
                 <Text style={[s.name, { color: theme.muted }]}>{item.name[lang]}</Text>
               </View>
               <Text style={[s.rate, { color: theme.primary }]}>
-                {rates[item.code] ? `${rates[item.code].toFixed(4)} ${item.code}` : "—"}
+                {rates[item.code] ? `${rates[item.code].toFixed(4)} ${item.symbol || item.code}` : "—"}
               </Text>
             </TouchableOpacity>
           )}

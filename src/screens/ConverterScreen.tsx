@@ -123,7 +123,7 @@ export default function ConverterScreen() {
                 onChangeText={setFromAmount}
                 keyboardType="decimal-pad"
               />
-              <Text style={[s.unit, { color: theme.muted }]}>{fromCurrency.code}</Text>
+              <Text style={[s.unit, { color: theme.muted }]}>{fromCurrency.symbol}</Text>
             </View>
             <TouchableOpacity style={[s.pill, { backgroundColor: theme.input }]} onPress={() => { setPickerTarget("from"); setPickerVisible(true); }}>
               <Text style={{ color: theme.text }}>{fromCurrency.flag} {fromCurrency.code}</Text>
@@ -146,7 +146,7 @@ export default function ConverterScreen() {
               <Text style={[s.amount, { color: theme.primary }]}>
                 {loadingRate ? "..." : (numTo?.toFixed(2) || "—")}
               </Text>
-              <Text style={[s.unit, { color: theme.primary, marginLeft: 8 }]}>{toCurrency.code}</Text>
+              <Text style={[s.unit, { color: theme.primary, marginLeft: 8 }]}>{toCurrency.symbol}</Text>
             </View>
             <TouchableOpacity style={[s.pill, { backgroundColor: theme.input }]} onPress={() => { setPickerTarget("to"); setPickerVisible(true); }}>
               <Text style={{ color: theme.text }}>{toCurrency.flag} {toCurrency.code}</Text>
@@ -169,7 +169,7 @@ export default function ConverterScreen() {
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={{ fontWeight: "700", color: theme.text }}>{code}</Text>
                 <Text style={{ fontSize: 13, color: theme.muted }}>
-                  1 {fromCurrency.code} = {val ? `${val.toFixed(4)} ${code}` : "..."}
+                  1 {fromCurrency.symbol} = {val ? `${val.toFixed(4)} ${cur?.symbol || code}` : "..."}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => removeFromWatchlist(code)} style={{ padding: 8 }}>
