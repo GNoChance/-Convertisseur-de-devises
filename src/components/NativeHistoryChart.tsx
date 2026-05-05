@@ -7,10 +7,11 @@ interface Props {
   from: string;
   to: string;
   height?: number;
+  period?: string;
 }
 
-export default function NativeHistoryChart({ from, to, height = 220 }: Props) {
-  const { theme, twelveDataKey, darkMode } = useApp();
+export default function NativeHistoryChart({ from, to, height = 220, period = "1M" }: Props) {
+  const { theme } = useApp();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -20,37 +21,48 @@ export default function NativeHistoryChart({ from, to, height = 220 }: Props) {
     setLoading(true);
     setError(false);
 
-    const symbol = `${from}/${to}`;
-    const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&outputsize=30&apikey=${twelveDataKey}`;
+    // Calcul de la date de début selon la période
+    const now = new Date();
+    const start = new Date(now);
+    if      (period === "1W") start.setDate(now.getDate() - 7);
+    else if (period === "1M") start.setMonth(now.getMonth() - 1);
+    else if (period === "3M") start.setMonth(now.getMonth() - 3);
+    else if (period === "6M") start.setMonth(now.getMonth() - 6);
+    else                      start.setFullYear(now.getFullYear() - 1);
+
+    const startStr = start.toISOString().split("T")[0];
+    const endStr   = now.toISOString().split("T")[0];
+
+    // Frankfurter API call
+    const url = `https://api.frankfurter.app/${startStr}..?from=${from}&to=${to}`;
 
     fetch(url)
       .then((r) => r.json())
       .then((res) => {
         if (cancelled) return;
-        if (res.status === "error" || !res.values) {
-          throw new Error(res.message);
-        }
+        if (!res.rates) throw new Error("No rates found");
 
-        const chartData = res.values
-          .map((item: any) => ({
-            value: parseFloat(item.close),
-            label: item.datetime.split("-")[2], // Just the day
-          }))
-          .reverse();
+        const chartData = Object.entries(res.rates).map(([date, rates]: any) => ({
+          value: rates[to],
+          label: date.split("-")[2], // Day of month
+        }));
 
+        if (chartData.length === 0) throw new Error("Empty data");
+        
         setData(chartData);
+        setLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [from, to, twelveDataKey]);
+  }, [from, to, period]);
 
   if (loading) {
     return (
@@ -63,7 +75,7 @@ export default function NativeHistoryChart({ from, to, height = 220 }: Props) {
   if (error || data.length === 0) {
     return (
       <View style={[s.center, { height }]}>
-        <Text style={{ color: theme.muted }}>Graphique indisponible</Text>
+        <Text style={{ color: theme.muted }}>Graphique indisponible pour cette paire</Text>
       </View>
     );
   }
@@ -73,7 +85,7 @@ export default function NativeHistoryChart({ from, to, height = 220 }: Props) {
       <LineChart
         data={data}
         height={height - 60}
-        width={Dimensions.get("window").width - 80}
+        width={Dimensions.get("window").width - 40}
         initialSpacing={10}
         color={theme.primary}
         thickness={3}
@@ -90,7 +102,6 @@ export default function NativeHistoryChart({ from, to, height = 220 }: Props) {
         curved
         animateOnDataChange
         animationDuration={1000}
-        onDataChangeAnimationDuration={300}
       />
     </View>
   );
