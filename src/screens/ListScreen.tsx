@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -10,10 +10,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Animated,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import Animated, { FadeInDown, Layout } from "react-native-reanimated";
 
 import { useApp } from "../context/AppContext";
 import { T } from "../i18n/translations";
@@ -30,7 +30,7 @@ const CURRENCIES = [
   { code: "CAD", flag: "🇨🇦", name: { fr: "Dollar canadien", en: "Canadian Dollar" }, symbol: "CA$" },
   { code: "AUD", flag: "🇦🇺", name: { fr: "Dollar australien", en: "Australian Dollar" }, symbol: "A$" },
   { code: "CNY", flag: "🇨🇳", name: { fr: "Yuan chinois", en: "Chinese Yuan" }, symbol: "¥" },
-  { code: "MAD", flag: "🇲🇦", name: { fr: "Dirham marocain", en: "Moroccan Dirham" }, symbol: "د.m." },
+  { code: "MAD", flag: "🇲🇦", name: { fr: "Dirham marocain", en: "Moroccan Dirham" }, symbol: "د.م." },
   { code: "AED", flag: "🇦🇪", name: { fr: "Dirham des EAU", en: "UAE Dirham" }, symbol: "د.إ" },
   { code: "BRL", flag: "🇧🇷", name: { fr: "Réal brésilien", en: "Brazilian Real" }, symbol: "R$" },
   { code: "INR", flag: "🇮🇳", name: { fr: "Roupie indienne", en: "Indian Rupee" }, symbol: "₹" },
@@ -56,6 +56,39 @@ const SkeletonItem = ({ theme }: { theme: any }) => (
     </View>
   </View>
 );
+
+const AnimatedRow = ({ item, index, theme, navigation, rates, lang }: any) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      delay: index * 50,
+      useNativeDriver: true,
+    }).start();
+  }, [index]);
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
+      <TouchableOpacity
+        style={[s.row, { backgroundColor: theme.card }]}
+        onPress={() => navigation.getParent()?.navigate("Detail", { code: item.code, name: item.name[lang] })}
+      >
+        <View style={[s.flagCircle, { backgroundColor: theme.input }]}>
+          <Text style={s.flag}>{item.flag}</Text>
+        </View>
+        <View style={s.info}>
+          <Text style={[s.code, { color: theme.text }]}>{item.code}</Text>
+          <Text style={[s.name, { color: theme.muted }]}>{item.name[lang]}</Text>
+        </View>
+        <Text style={[s.rate, { color: theme.primary }]}>
+          {rates[item.code] ? `${rates[item.code].toFixed(4)} ${item.symbol || item.code}` : "—"}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
 
 export default function ListScreen() {
   const { theme, lang } = useApp();
@@ -104,14 +137,12 @@ export default function ListScreen() {
   const renderHeader = () => (
     <View style={s.headerContainer}>
       <Text style={[s.title, { color: theme.text }]}>Cours du marché</Text>
-      
       <View style={s.baseRow}>
         <Text style={[s.subtitle, { color: theme.muted }]}>Base : 1 {baseCurrency.symbol || baseCurrency.code}</Text>
         <TouchableOpacity style={[s.changeBtn, { backgroundColor: theme.primary }]} onPress={() => setPickerVisible(true)}>
           <Text style={{ color: "#FFF", fontSize: 12, fontWeight: "700" }}>{lang === "fr" ? "Changer" : "Change"}</Text>
         </TouchableOpacity>
       </View>
-
       <TextInput
         style={[s.search, { backgroundColor: theme.input, color: theme.text }]}
         placeholder={t.searchCurrency}
@@ -119,23 +150,9 @@ export default function ListScreen() {
         value={search}
         onChangeText={setSearch}
       />
-      
-      {error && (
-        <View style={s.errorBox}>
-          <Text style={{ color: 'red' }}>{lang === "fr" ? "Erreur de chargement" : "Loading error"}</Text>
-        </View>
-      )}
+      {error && <View style={s.errorBox}><Text style={{ color: 'red' }}>{lang === "fr" ? "Erreur de chargement" : "Loading error"}</Text></View>}
     </View>
   );
-
-  const renderEmpty = () => {
-    if (loading) return null;
-    return (
-      <View style={s.emptyBox}>
-        <Text style={{ color: theme.muted }}>{lang === "fr" ? "Aucun résultat" : "No results"}</Text>
-      </View>
-    );
-  };
 
   return (
     <LayoutComponent>
@@ -150,37 +167,19 @@ export default function ListScreen() {
             data={filtered}
             keyExtractor={(item) => item.code}
             ListHeaderComponent={renderHeader}
-            ListEmptyComponent={renderEmpty}
+            ListEmptyComponent={() => <View style={s.emptyBox}><Text style={{ color: theme.muted }}>{lang === "fr" ? "Aucun résultat" : "No results"}</Text></View>}
             contentContainerStyle={{ paddingBottom: 40 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchRates(true)} tintColor={theme.primary} />}
-            // Optimisations demandées
             windowSize={10}
             maxToRenderPerBatch={10}
             removeClippedSubviews={true}
             renderItem={({ item, index }) => (
-              <Animated.View entering={FadeInDown.delay(index * 50).duration(400)} layout={Layout.springify()}>
-                <TouchableOpacity
-                  style={[s.row, { backgroundColor: theme.card }]}
-                  onPress={() => navigation.getParent()?.navigate("Detail", { code: item.code, name: item.name[lang] })}
-                >
-                  <View style={[s.flagCircle, { backgroundColor: theme.input }]}>
-                    <Text style={s.flag}>{item.flag}</Text>
-                  </View>
-                  <View style={s.info}>
-                    <Text style={[s.code, { color: theme.text }]}>{item.code}</Text>
-                    <Text style={[s.name, { color: theme.muted }]}>{item.name[lang]}</Text>
-                  </View>
-                  <Text style={[s.rate, { color: theme.primary }]}>
-                    {rates[item.code] ? `${rates[item.code].toFixed(4)} ${item.symbol || item.code}` : "—"}
-                  </Text>
-                </TouchableOpacity>
-              </Animated.View>
+              <AnimatedRow item={item} index={index} theme={theme} navigation={navigation} rates={rates} lang={lang} />
             )}
           />
         )}
       </View>
 
-      {/* Picker Modal */}
       <Modal visible={pickerVisible} animationType="slide" transparent>
         <Pressable style={s.overlay} onPress={() => setPickerVisible(false)} />
         <View style={[s.sheet, { backgroundColor: theme.card }]}>
@@ -188,14 +187,9 @@ export default function ListScreen() {
             data={CURRENCIES}
             keyExtractor={c => c.code}
             renderItem={({ item }) => (
-              <TouchableOpacity 
-                style={s.pRow} 
-                onPress={() => { setBase(item.code); setPickerVisible(false); }}
-              >
+              <TouchableOpacity style={s.pRow} onPress={() => { setBase(item.code); setPickerVisible(false); }}>
                 <Text style={s.pFlag}>{item.flag}</Text>
-                <Text style={{ flex: 1, marginLeft: 12, color: theme.text, fontWeight: base === item.code ? "700" : "400" }}>
-                  {item.name[lang]} ({item.code})
-                </Text>
+                <Text style={{ flex: 1, marginLeft: 12, color: theme.text, fontWeight: base === item.code ? "700" : "400" }}>{item.name[lang]} ({item.code})</Text>
                 {base === item.code && <Text style={{ color: theme.primary }}>✓</Text>}
               </TouchableOpacity>
             )}
