@@ -60,7 +60,7 @@ function getCurrency(code: string): Currency {
 export default function ConverterScreen() {
   const {
     theme, lang, darkMode, setDarkMode,
-    watchlist, removeFromWatchlist,
+    watchlist, addToWatchlist, removeFromWatchlist, isInWatchlist,
   } = useApp();
   const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>();
   const t          = T[lang];
@@ -72,7 +72,9 @@ export default function ConverterScreen() {
   const [loadingRate,  setLoadingRate]  = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget,  setPickerTarget]  = useState<"from" | "to">("from");
+  const [wlPickerVisible, setWlPickerVisible] = useState(false);
   const [search,         setSearch]        = useState("");
+  const [wlSearch,       setWlSearch]      = useState("");
   const [wlRates,          setWlRates]          = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -106,6 +108,12 @@ export default function ConverterScreen() {
     (c) =>
       c.code.toLowerCase().includes(search.toLowerCase()) ||
       c.name[lang].toLowerCase().includes(search.toLowerCase())
+  );
+
+  const wlFiltered = CURRENCIES.filter(
+    (c) =>
+      c.code.toLowerCase().includes(wlSearch.toLowerCase()) ||
+      c.name[lang].toLowerCase().includes(wlSearch.toLowerCase())
   );
 
   return (
@@ -154,33 +162,49 @@ export default function ConverterScreen() {
           </View>
         </View>
 
-        {/* Watchlist */}
-        <Text style={[s.sectionTitle, { color: theme.muted }]}>{t.watchlistTitle}</Text>
-        {watchlist.map(code => {
-          const cur = CURRENCIES.find(c => c.code === code);
-          const val = wlRates[code];
-          return (
-            <TouchableOpacity 
-              key={code} 
-              style={[s.wlRow, { backgroundColor: theme.card }]}
-              onPress={() => navigation.getParent()?.navigate("Detail", { code, name: cur?.name[lang] || code })}
-            >
-              <Text style={s.flag}>{cur?.flag}</Text>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ fontWeight: "700", color: theme.text }}>{code}</Text>
-                <Text style={{ fontSize: 13, color: theme.muted }}>
-                  1 {fromCurrency.symbol} = {val ? `${val.toFixed(4)} ${cur?.symbol || code}` : "..."}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => removeFromWatchlist(code)} style={{ padding: 8 }}>
-                <Text style={{ color: "red", fontWeight: "bold" }}>✕</Text>
+        {/* Watchlist Header */}
+        <View style={s.wlHeader}>
+          <Text style={[s.sectionTitle, { color: theme.muted, marginTop: 0 }]}>{t.watchlistTitle}</Text>
+          <TouchableOpacity 
+            style={[s.wlAddBtn, { backgroundColor: theme.primary + "20" }]} 
+            onPress={() => { setWlSearch(""); setWlPickerVisible(true); }}
+          >
+            <Text style={{ color: theme.primary, fontWeight: "700", fontSize: 12 }}>+ Ajouter</Text>
+          </TouchableOpacity>
+        </View>
+
+        {watchlist.length === 0 ? (
+          <View style={[s.emptyWl, { backgroundColor: theme.card }]}>
+            <Text style={{ color: theme.muted }}>{t.watchlistEmpty}</Text>
+          </View>
+        ) : (
+          watchlist.map(code => {
+            const cur = CURRENCIES.find(c => c.code === code);
+            const val = wlRates[code];
+            return (
+              <TouchableOpacity 
+                key={code} 
+                style={[s.wlRow, { backgroundColor: theme.card }]}
+                onPress={() => navigation.getParent()?.navigate("Detail", { code, name: cur?.name[lang] || code })}
+              >
+                <Text style={s.flag}>{cur?.flag}</Text>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={{ fontWeight: "700", color: theme.text }}>{code}</Text>
+                  <Text style={{ fontSize: 13, color: theme.muted }}>
+                    1 {fromCurrency.symbol} = {val ? `${val.toFixed(4)} ${cur?.symbol || code}` : "..."}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => removeFromWatchlist(code)} style={{ padding: 8 }}>
+                  <Text style={{ color: "red", fontWeight: "bold" }}>✕</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          );
-        })}
+            );
+          })
+        )}
 
       </ScrollView>
 
+      {/* Main Picker Modal */}
       <Modal visible={pickerVisible} animationType="slide" transparent>
         <Pressable style={s.overlay} onPress={() => setPickerVisible(false)} />
         <View style={[s.sheet, { backgroundColor: theme.card }]}>
@@ -203,6 +227,38 @@ export default function ConverterScreen() {
           />
         </View>
       </Modal>
+
+      {/* Watchlist Picker Modal */}
+      <Modal visible={wlPickerVisible} animationType="slide" transparent>
+        <Pressable style={s.overlay} onPress={() => setWlPickerVisible(false)} />
+        <View style={[s.sheet, { backgroundColor: theme.card }]}>
+          <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 15, color: theme.text }}>Ajouter aux favoris</Text>
+          <TextInput 
+            style={[s.search, { backgroundColor: theme.input, color: theme.text }]}
+            placeholder={t.searchCurrency}
+            placeholderTextColor={theme.muted}
+            value={wlSearch}
+            onChangeText={setWlSearch}
+          />
+          <FlatList
+            data={wlFiltered}
+            keyExtractor={c => c.code}
+            renderItem={({ item }) => {
+              const inList = isInWatchlist(item.code);
+              return (
+                <TouchableOpacity 
+                  style={[s.pRow, inList && { opacity: 0.5 }]} 
+                  onPress={() => { if(!inList){ addToWatchlist(item.code); setWlPickerVisible(false); } }}
+                >
+                  <Text style={s.flag}>{item.flag}</Text>
+                  <Text style={{ flex: 1, marginLeft: 12, color: theme.text }}>{item.name[lang]} ({item.code})</Text>
+                  {inList && <Text style={{ color: theme.primary }}>★</Text>}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      </Modal>
     </Layout>
   );
 }
@@ -215,11 +271,14 @@ const s = StyleSheet.create({
   unit: { fontSize: 18, fontWeight: "600", marginLeft: 6, marginTop: 4 },
   pill: { flexDirection: "row", alignItems: "center", padding: 8, borderRadius: 20 },
   swap: { alignSelf: "center", width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginVertical: 10 },
-  sectionTitle: { fontSize: 12, fontWeight: "700", textTransform: "uppercase", marginTop: 20, marginBottom: 10 },
+  sectionTitle: { fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
+  wlHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 10 },
+  wlAddBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
   wlRow: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 16, marginBottom: 8 },
+  emptyWl: { padding: 30, alignItems: 'center', borderRadius: 16 },
   flag: { fontSize: 24 },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, height: "60%" },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, height: "70%", marginTop: 'auto' },
   search: { borderRadius: 12, padding: 12, marginBottom: 10 },
-  pRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
+  pRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
 });
