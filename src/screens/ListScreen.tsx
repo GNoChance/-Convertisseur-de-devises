@@ -63,32 +63,39 @@ const SkeletonItem = ({ theme }: { theme: any }) => (
 );
 
 export default function ListScreen() {
-  const { theme, lang, darkMode } = useApp();
+  const { theme, lang, darkMode, twelveDataKey } = useApp();
   const navigation = useNavigation<Nav>();
   const t = T[lang];
-
+ 
   const [base, setBase] = useState("EUR");
   const [rates, setRates] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
-
+ 
   const fetchRates = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`https://api.frankfurter.app/latest?from=${base}`);
+      const symbols = CURRENCIES.filter(c => c.code !== base).map(c => `${base}/${c.code}`).join(",");
+      const r = await fetch(`https://api.twelvedata.com/price?symbol=${symbols}&apikey=${twelveDataKey}`);
       if (!r.ok) throw new Error("API Error");
       const data = await r.json();
-      setRates(data.rates || {});
+      
+      const newRates: Record<string, number> = {};
+      Object.entries(data).forEach(([symbol, info]: [string, any]) => {
+        const code = symbol.split("/")[1];
+        if (info.price) newRates[code] = parseFloat(info.price);
+      });
+      setRates(newRates);
     } catch (e) {
       setError(lang === "fr" ? "Erreur de connexion" : "Connection error");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [base, lang]);
+  }, [base, lang, twelveDataKey]);
 
   useEffect(() => {
     fetchRates();

@@ -1,16 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Linking,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { WebView as WebViewNative } from "react-native-webview";
+import NativeHistoryChart from "../components/NativeHistoryChart";
 
 import { useApp } from "../context/AppContext";
 
@@ -264,68 +255,43 @@ const sc = StyleSheet.create({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function GraphScreen() {
-  const { theme, lang, darkMode, selectedFrom, selectedTo } = useApp();
-  const [period,     setPeriod]     = useState<PeriodKey>("1Y");
-  const [chartReady, setChartReady] = useState(false);
-  const [stats,      setStats]      = useState<PeriodStats | null>(null);
+  const { theme, lang, darkMode, selectedFrom, selectedTo, twelveDataKey } = useApp();
+  const [period, setPeriod] = useState<PeriodKey>("1M");
+  const [stats, setStats] = useState<PeriodStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const webViewRef = useRef<InstanceType<typeof WebViewNative>>(null);
 
-  const fromFlag = FLAGS[selectedFrom] ?? "🏳️";
-  const toFlag   = FLAGS[selectedTo]   ?? "🏳️";
   const tvUrl    = `https://www.tradingview.com/chart/?symbol=FX:${selectedFrom}${selectedTo}`;
   const bg       = darkMode ? "#0F0F14" : theme.bg;
-
-  // ── Fetch stats (parallel au chart WebView) ──────────────────────────────
 
   useEffect(() => {
     let cancelled = false;
     setStats(null);
     setStatsLoading(true);
 
-    const { start, end } = getPeriodDates(period);
-
-    fetch(
-      `https://api.frankfurter.app/${start}..${end}?from=${selectedFrom}&to=${selectedTo}`,
-      { headers: { Accept: "application/json" } }
-    )
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data) => {
+    const symbol = `${selectedFrom}/${selectedTo}`;
+    fetch(`https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${twelveDataKey}`)
+      .then(r => r.json())
+      .then(res => {
         if (cancelled) return;
-        if (!data.rates) return;
-
-        const values: number[] = Object.values(data.rates).map(
-          (r: any) => r[selectedTo] as number
-        ).filter((v) => typeof v === "number");
-
-        if (values.length === 0) return;
-
-        const open       = values[0];
-        const current    = values[values.length - 1];
-        const min        = Math.min(...values);
-        const max        = Math.max(...values);
-        const changeAbs  = current - open;
-        const changePct  = ((current - open) / open) * 100;
-
-        setStats({ current, open, min, max, changePct, changeAbs });
+        if (res.price) {
+          setStats({
+            current:   parseFloat(res.price),
+            open:      parseFloat(res.open),
+            min:       parseFloat(res.low),
+            max:       parseFloat(res.high),
+            changePct: parseFloat(res.percent_change),
+            changeAbs: parseFloat(res.change),
+          });
+        }
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setStatsLoading(false); });
 
     return () => { cancelled = true; };
-  }, [period, selectedFrom, selectedTo]);
-
-  // ── Period change ─────────────────────────────────────────────────────────
+  }, [selectedFrom, selectedTo, twelveDataKey]);
 
   const handlePeriod = (p: PeriodKey) => {
     setPeriod(p);
-    setChartReady(false);
-    webViewRef.current?.injectJavaScript(`window.loadPeriod('${p}'); true;`);
-    // On ré-affiche le loader chart brièvement, puis on le retire après 1s
-    setTimeout(() => setChartReady(true), 800);
   };
 
   // ── Labels i18n ───────────────────────────────────────────────────────────
@@ -458,24 +424,16 @@ export default function GraphScreen() {
         })}
       </View>
 
-      {/* ── Chart (lightweight-charts via WebView) ── */}
+      {/* ── Chart (Native) ── */}
       <View style={s.chartContainer}>
-        {!chartReady && (
-          <View style={[s.chartLoader, { backgroundColor: bg }]}>
-            <ActivityIndicator color={theme.primary} size="large" />
-          </View>
-        )}
-        <WebViewNative
-          ref={webViewRef}
-          style={s.webview}
-          source={{ html: buildChartHtml(selectedFrom, selectedTo, darkMode, period) }}
-          javaScriptEnabled
-          domStorageEnabled
-          originWhitelist={["*"]}
-          mixedContentMode="always"
-          overScrollMode="never"
-          onLoadEnd={() => setChartReady(true)}
+        <NativeHistoryChart
+          from={selectedFrom}
+          to={selectedTo}
+          height={300}
         />
+        <Text style={[s.sub, { color: theme.muted, textAlign: "center", marginTop: 20 }]}>
+          {lang === "fr" ? "Source : Twelve Data API" : "Source: Twelve Data API"}
+        </Text>
       </View>
     </SafeAreaView>
   );

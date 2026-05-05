@@ -7,8 +7,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useApp } from "../context/AppContext";
 import { T } from "../i18n/translations";
 import { RootStackParamList } from "../navigation/AppNavigator";
-import { useHistoricalRates } from "../hooks/useHistoricalRates";
-import HistoryChart from "../components/HistoryChart";
+import NativeHistoryChart from "../components/NativeHistoryChart";
+import { useEffect, useState } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,11 +61,33 @@ export default function DetailScreen() {
   const t          = T[lang];
 
   const { code, name } = route.params;
-  const baseCode = "EUR";           // on compare toujours vs EUR par défaut
+  const baseCode = "EUR";
   const flag     = FLAGS[code] ?? "🏳️";
   const followed = isInWatchlist(code);
 
-  const { current, min, max, changePct, loading } = useHistoricalRates(baseCode, code, 30);
+  const { twelveDataKey } = useApp();
+  const [current, setCurrent] = useState<number | null>(null);
+  const [changePct, setChangePct] = useState<number | null>(null);
+  const [min, setMin] = useState<number | null>(null);
+  const [max, setMax] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const symbol = `${baseCode}/${code}`;
+    fetch(`https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${twelveDataKey}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.price) {
+          setCurrent(parseFloat(res.price));
+          setChangePct(parseFloat(res.percent_change));
+          setMin(parseFloat(res.low));
+          setMax(parseFloat(res.high));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [code, twelveDataKey]);
 
   const isPositive  = changePct !== null ? changePct >= 0 : true;
   const changeColor = isPositive ? "#34C759" : "#FF3B30";
@@ -141,18 +163,16 @@ export default function DetailScreen() {
             {baseCode} / {code} · {lang === "fr" ? "30 derniers jours" : "Last 30 days"}
           </Text>
           <View style={s.chartWrap}>
-            <HistoryChart
+            <NativeHistoryChart
               from={baseCode}
               to={code}
-              dark={darkMode}
-              primary={theme.primary}
               height={220}
             />
           </View>
         </View>
 
         {/* ── Info source ── */}
-        <Text style={[s.source, { color: theme.muted }]}>{t.detailSource}</Text>
+        <Text style={[s.source, { color: theme.muted }]}>Source : Twelve Data API</Text>
       </ScrollView>
     </SafeAreaView>
   );

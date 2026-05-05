@@ -107,20 +107,30 @@ export default function ConverterScreen() {
   const [wlRates,          setWlRates]          = useState<Record<string, number>>({});
   const [wlSearch,         setWlSearch]         = useState("");
 
+  const { twelveDataKey } = useApp();
+ 
   // Récupère les taux pour toutes les devises de la watchlist
   useEffect(() => {
     if (watchlist.length === 0) return;
-    const targets = watchlist.join(",");
+    const symbols = watchlist.map(code => `${fromCurrency.code}/${code}`).join(",");
     fetch(
-      `https://api.frankfurter.app/latest?from=${fromCurrency.code}&to=${targets}`,
-      { headers: { Accept: "application/json" } }
+      `https://api.twelvedata.com/price?symbol=${symbols}&apikey=${twelveDataKey}`
     )
       .then((r) => r.json())
       .then((data) => {
-        if (data.rates) setWlRates(data.rates as Record<string, number>);
+        const newRates: Record<string, number> = {};
+        if (watchlist.length === 1) {
+          if (data.price) newRates[watchlist[0]] = parseFloat(data.price);
+        } else {
+          Object.entries(data).forEach(([symbol, info]: [string, any]) => {
+            const code = symbol.split("/")[1];
+            if (info.price) newRates[code] = parseFloat(info.price);
+          });
+        }
+        setWlRates(newRates);
       })
       .catch(() => {});
-  }, [watchlist, fromCurrency.code]);
+  }, [watchlist, fromCurrency.code, twelveDataKey]);
 
   // ── Liste complète depuis Frankfurter API ──
   const [apiCurrencies,        setApiCurrencies]        = useState<{ code: string; name: string }[]>([]);
@@ -134,23 +144,23 @@ export default function ConverterScreen() {
     setLoadingRate(true);
     setRateError(false);
     try {
+      const symbol = `${fromCurrency.code}/${toCurrency.code}`;
       const res  = await fetch(
-        `https://api.frankfurter.app/latest?from=${fromCurrency.code}&to=${toCurrency.code}`,
-        { headers: { Accept: "application/json" } }
+        `https://api.twelvedata.com/price?symbol=${symbol}&apikey=${twelveDataKey}`
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const fetched = data.rates?.[toCurrency.code];
-      if (fetched == null) throw new Error("rate_missing");
-      setRate(fetched);
-      setRateDate(data.date ?? "");
-      setRateError(false);
+      if (data.price) {
+        setRate(parseFloat(data.price));
+        setRateDate(new Date().toLocaleDateString());
+      } else {
+        throw new Error("rate_missing");
+      }
     } catch {
       setRate(null);
       setRateError(true);
     }
     finally  { setLoadingRate(false); }
-  }, [fromCurrency.code, toCurrency.code]);
+  }, [fromCurrency.code, toCurrency.code, twelveDataKey]);
 
   useEffect(() => { fetchRate(); }, [fetchRate]);
 

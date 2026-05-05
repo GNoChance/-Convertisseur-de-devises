@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 import { Platform } from "react-native";
 import { Lang } from "../i18n/translations";
+ 
+export const TWELVE_DATA_KEY = "c4a4fca430204fbd9d6aa302b50a5e39";
 
 export const LIGHT = {
   primary: "#6B4EFF",
@@ -73,6 +75,8 @@ interface AppContextValue {
   // Onboarding
   hasOnboarded:    boolean;
   setHasOnboarded: (v: boolean) => void;
+  // API
+  twelveDataKey: string;
 }
 
 const AppContext = createContext<AppContextValue>({} as AppContextValue);
@@ -167,6 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sidebarCollapsed, setSidebarCollapsed,
       isLoggedIn, currentUserEmail, login, logout,
       hasOnboarded, setHasOnboarded,
+      twelveDataKey: TWELVE_DATA_KEY,
     }}>
       {children}
     </AppContext.Provider>
