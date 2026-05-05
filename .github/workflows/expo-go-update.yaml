@@ -15,15 +15,11 @@ jobs:
 
       - name: 🏗 Setup Node
         uses: actions/setup-node@v3
-
-      - name: 🏗 Setup cache
-        uses: actions/cache@v4
         with:
-          path: '**/node_modules'
-          key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.lock') }}
+          node-version: 18
 
       - name: 📦 Install dependencies
-        run: npm ci
+        run: npm install
         shell: bash
 
       - name: 🏗  Setup EAS
@@ -33,5 +29,5 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Update Expo Go
-        run: eas update --auto
+        run: eas update --branch main --auto
         shell: bash
