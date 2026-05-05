@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { WebView } from "react-native-webview";
@@ -28,12 +28,36 @@ export default function DetailScreen() {
   const navigation = useNavigation<Nav>();
   const { code, name } = route.params;
   const [rate, setRate] = useState<number | null>(null);
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
     fetch(`https://api.frankfurter.app/latest?from=EUR&to=${code}`)
       .then(r => r.json())
-      .then(res => setRate(res.rates[code]))
+      .then(res => { if (!cancelled) setRate(res.rates[code]); })
       .catch(() => {});
+
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    const startStr = start.toISOString().split('T')[0];
+
+    fetch(`https://api.frankfurter.app/${startStr}..?from=EUR&to=${code}`)
+      .then(r => r.json())
+      .then(res => {
+        if (cancelled) return;
+        const points = Object.entries(res.rates).map(([d, r]: any) => ({
+          time: d,
+          value: r[code]
+        }));
+        setChartData(points);
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
   }, [code]);
 
   const html = `
@@ -41,7 +65,7 @@ export default function DetailScreen() {
     <html>
     <head>
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <script src="https://unpkg.com/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
+      <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
       <style>
         body { margin: 0; background: ${darkMode ? "#1C1C28" : "#FFFFFF"}; overflow: hidden; }
         #chart { width: 100vw; height: 100vh; }
@@ -60,14 +84,8 @@ export default function DetailScreen() {
         const series = chart.addAreaSeries({
           lineColor: '#6B4EFF', topColor: '#6B4EFF44', bottomColor: '#6B4EFF00', lineWidth: 3
         });
-        const start = new Date(); start.setDate(start.getDate() - 30);
-        fetch('https://api.frankfurter.app/' + start.toISOString().split('T')[0] + '..?from=EUR&to=${code}')
-          .then(r => r.json())
-          .then(data => {
-            const points = Object.entries(data.rates).map(([d, r]) => ({ time: d, value: r['${code}'] }));
-            series.setData(points);
-            chart.timeScale().fitContent();
-          });
+        series.setData(${JSON.stringify(chartData)});
+        chart.timeScale().fitContent();
       </script>
     </body>
     </html>
@@ -97,7 +115,11 @@ export default function DetailScreen() {
         <View style={[s.chartCard, { backgroundColor: theme.card }]}>
           <Text style={[s.chartTitle, { color: theme.text }]}>Historique 30j</Text>
           <View style={s.chart}>
-            <WebView originWhitelist={['*']} source={{ html }} style={{ backgroundColor: 'transparent' }} scrollEnabled={false} />
+            {loading ? (
+              <View style={s.loader}><ActivityIndicator color={theme.primary} /></View>
+            ) : (
+              <WebView key={code} originWhitelist={['*']} source={{ html }} style={{ backgroundColor: 'transparent' }} scrollEnabled={false} />
+            )}
           </View>
         </View>
       </ScrollView>
@@ -117,4 +139,5 @@ const s = StyleSheet.create({
   chartCard: { borderRadius: 20, padding: 16 },
   chartTitle: { fontSize: 18, fontWeight: "700", marginBottom: 16 },
   chart: { height: 250, borderRadius: 12, overflow: 'hidden' },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
