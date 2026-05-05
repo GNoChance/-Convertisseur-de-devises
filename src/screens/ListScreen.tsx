@@ -2,6 +2,8 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -41,25 +43,25 @@ const CURRENCIES = [
   { code: "TRY", flag: "🇹🇷", name: { fr: "Livre turque", en: "Turkish Lira" } },
   { code: "ZAR", flag: "🇿🇦", name: { fr: "Rand sud-africain", en: "South African Rand" } },
   { code: "HKD", flag: "🇭🇰", name: { fr: "Dollar de HK", en: "Hong Kong Dollar" } },
-  { code: "DKK", flag: "🇩🇰", name: { fr: "Couronne danoise",     en: "Danish Krone" } },
+  { code: "DKK", flag: "🇩🇰", name: { fr: "Couronne danoise", en: "Danish Krone" } },
 ];
-
-type Nav = BottomTabNavigationProp<TabParamList>;
 
 export default function ListScreen() {
   const { theme, lang } = useApp();
-  const navigation = useNavigation<Nav>();
+  const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>();
   const t = T[lang];
  
+  const [base, setBase] = useState("EUR");
   const [rates, setRates] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [pickerVisible, setPickerVisible] = useState(false);
  
   const fetchRates = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const r = await fetch(`https://api.frankfurter.app/latest?from=EUR`);
+      const r = await fetch(`https://api.frankfurter.app/latest?from=${base}`);
       if (!r.ok) throw new Error("API Error");
       const data = await r.json();
       setRates(data.rates || {});
@@ -68,7 +70,7 @@ export default function ListScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [base]);
 
   useEffect(() => {
     fetchRates();
@@ -77,16 +79,25 @@ export default function ListScreen() {
   const filtered = useMemo(() => 
     CURRENCIES.filter(
       (c) =>
-        c.code !== "EUR" &&
+        c.code !== base &&
         (c.code.toLowerCase().includes(search.toLowerCase()) ||
           c.name[lang].toLowerCase().includes(search.toLowerCase()))
-    ), [search, lang]
+    ), [search, lang, base]
   );
+
+  const baseCurrency = CURRENCIES.find(c => c.code === base) || CURRENCIES[0];
 
   const renderHeader = () => (
     <View style={s.headerContainer}>
       <Text style={[s.title, { color: theme.text }]}>Cours du marché</Text>
-      <Text style={[s.subtitle, { color: theme.muted }]}>Base : 1 EUR</Text>
+      
+      <View style={s.baseRow}>
+        <Text style={[s.subtitle, { color: theme.muted }]}>Base : 1 {base}</Text>
+        <TouchableOpacity style={[s.changeBtn, { backgroundColor: theme.primary }]} onPress={() => setPickerVisible(true)}>
+          <Text style={{ color: "#FFF", fontSize: 12, fontWeight: "700" }}>{lang === "fr" ? "Changer" : "Change"}</Text>
+        </TouchableOpacity>
+      </View>
+
       <TextInput
         style={[s.search, { backgroundColor: theme.input, color: theme.text }]}
         placeholder={t.searchCurrency}
@@ -125,6 +136,29 @@ export default function ListScreen() {
           )}
         />
       </View>
+
+      {/* Picker Modal */}
+      <Modal visible={pickerVisible} animationType="slide" transparent>
+        <Pressable style={s.overlay} onPress={() => setPickerVisible(false)} />
+        <View style={[s.sheet, { backgroundColor: theme.card }]}>
+          <FlatList
+            data={CURRENCIES}
+            keyExtractor={c => c.code}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={s.pRow} 
+                onPress={() => { setBase(item.code); setPickerVisible(false); }}
+              >
+                <Text style={s.pFlag}>{item.flag}</Text>
+                <Text style={{ flex: 1, marginLeft: 12, color: theme.text, fontWeight: base === item.code ? "700" : "400" }}>
+                  {item.name[lang]} ({item.code})
+                </Text>
+                {base === item.code && <Text style={{ color: theme.primary }}>✓</Text>}
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
     </LayoutComponent>
   );
 }
@@ -133,7 +167,9 @@ const s = StyleSheet.create({
   container: { flex: 1 },
   headerContainer: { paddingHorizontal: 20, paddingTop: 10 },
   title: { fontSize: 28, fontWeight: "800" },
-  subtitle: { fontSize: 15, marginBottom: 20, marginTop: 4 },
+  baseRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: 10 },
+  subtitle: { fontSize: 15 },
+  changeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
   search: { borderRadius: 14, padding: 12, fontSize: 15, marginBottom: 20 },
   row: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 18, marginBottom: 10, marginHorizontal: 20 },
   flagCircle: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
@@ -142,4 +178,8 @@ const s = StyleSheet.create({
   code: { fontSize: 16, fontWeight: "700" },
   name: { fontSize: 13 },
   rate: { fontSize: 15, fontWeight: "700" },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, height: "70%", marginTop: "auto" },
+  pRow: { flexDirection: "row", alignItems: "center", paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
+  pFlag: { fontSize: 24 },
 });
