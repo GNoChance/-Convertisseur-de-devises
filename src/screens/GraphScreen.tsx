@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -260,6 +261,8 @@ export default function GraphScreen() {
   const [stats, setStats] = useState<PeriodStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
+  const fromFlag = FLAGS[selectedFrom] ?? "🏳️";
+  const toFlag   = FLAGS[selectedTo]   ?? "🏳️";
   const tvUrl    = `https://www.tradingview.com/chart/?symbol=FX:${selectedFrom}${selectedTo}`;
   const bg       = darkMode ? "#0F0F14" : theme.bg;
 
