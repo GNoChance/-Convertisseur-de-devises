@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import Animated, { FadeInDown, Layout } from "react-native-reanimated";
 
 import { useApp } from "../context/AppContext";
 import { T } from "../i18n/translations";
@@ -29,7 +30,7 @@ const CURRENCIES = [
   { code: "CAD", flag: "🇨🇦", name: { fr: "Dollar canadien", en: "Canadian Dollar" }, symbol: "CA$" },
   { code: "AUD", flag: "🇦🇺", name: { fr: "Dollar australien", en: "Australian Dollar" }, symbol: "A$" },
   { code: "CNY", flag: "🇨🇳", name: { fr: "Yuan chinois", en: "Chinese Yuan" }, symbol: "¥" },
-  { code: "MAD", flag: "🇲🇦", name: { fr: "Dirham marocain", en: "Moroccan Dirham" }, symbol: "د.م." },
+  { code: "MAD", flag: "🇲🇦", name: { fr: "Dirham marocain", en: "Moroccan Dirham" }, symbol: "د.m." },
   { code: "AED", flag: "🇦🇪", name: { fr: "Dirham des EAU", en: "UAE Dirham" }, symbol: "د.إ" },
   { code: "BRL", flag: "🇧🇷", name: { fr: "Réal brésilien", en: "Brazilian Real" }, symbol: "R$" },
   { code: "INR", flag: "🇮🇳", name: { fr: "Roupie indienne", en: "Indian Rupee" }, symbol: "₹" },
@@ -46,6 +47,16 @@ const CURRENCIES = [
   { code: "DKK", flag: "🇩🇰", name: { fr: "Couronne danoise", en: "Danish Krone" }, symbol: "kr" },
 ];
 
+const SkeletonItem = ({ theme }: { theme: any }) => (
+  <View style={[s.row, { backgroundColor: theme.card, opacity: 0.5 }]}>
+    <View style={[s.flagCircle, { backgroundColor: theme.input }]} />
+    <View style={s.info}>
+      <View style={{ height: 16, width: 60, backgroundColor: theme.input, borderRadius: 4 }} />
+      <View style={{ height: 12, width: 120, backgroundColor: theme.input, borderRadius: 4, marginTop: 6 }} />
+    </View>
+  </View>
+);
+
 export default function ListScreen() {
   const { theme, lang } = useApp();
   const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>();
@@ -57,15 +68,18 @@ export default function ListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [error, setError] = useState<boolean>(false);
  
   const fetchRates = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
+    setError(false);
     try {
       const r = await fetch(`https://api.frankfurter.app/latest?from=${base}`);
       if (!r.ok) throw new Error("API Error");
       const data = await r.json();
       setRates(data.rates || {});
     } catch (e) {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -105,36 +119,65 @@ export default function ListScreen() {
         value={search}
         onChangeText={setSearch}
       />
+      
+      {error && (
+        <View style={s.errorBox}>
+          <Text style={{ color: 'red' }}>{lang === "fr" ? "Erreur de chargement" : "Loading error"}</Text>
+        </View>
+      )}
     </View>
   );
+
+  const renderEmpty = () => {
+    if (loading) return null;
+    return (
+      <View style={s.emptyBox}>
+        <Text style={{ color: theme.muted }}>{lang === "fr" ? "Aucun résultat" : "No results"}</Text>
+      </View>
+    );
+  };
 
   return (
     <LayoutComponent>
       <View style={s.container}>
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.code}
-          ListHeaderComponent={renderHeader}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchRates(true)} tintColor={theme.primary} />}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[s.row, { backgroundColor: theme.card }]}
-              onPress={() => navigation.getParent()?.navigate("Detail", { code: item.code, name: item.name[lang] })}
-            >
-              <View style={[s.flagCircle, { backgroundColor: theme.input }]}>
-                <Text style={s.flag}>{item.flag}</Text>
-              </View>
-              <View style={s.info}>
-                <Text style={[s.code, { color: theme.text }]}>{item.code}</Text>
-                <Text style={[s.name, { color: theme.muted }]}>{item.name[lang]}</Text>
-              </View>
-              <Text style={[s.rate, { color: theme.primary }]}>
-                {rates[item.code] ? `${rates[item.code].toFixed(4)} ${item.symbol || item.code}` : "—"}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
+        {loading && !refreshing ? (
+          <View style={{ padding: 20 }}>
+            {renderHeader()}
+            {[1, 2, 3, 4, 5, 6].map(i => <SkeletonItem key={i} theme={theme} />)}
+          </View>
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.code}
+            ListHeaderComponent={renderHeader}
+            ListEmptyComponent={renderEmpty}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchRates(true)} tintColor={theme.primary} />}
+            // Optimisations demandées
+            windowSize={10}
+            maxToRenderPerBatch={10}
+            removeClippedSubviews={true}
+            renderItem={({ item, index }) => (
+              <Animated.View entering={FadeInDown.delay(index * 50).duration(400)} layout={Layout.springify()}>
+                <TouchableOpacity
+                  style={[s.row, { backgroundColor: theme.card }]}
+                  onPress={() => navigation.getParent()?.navigate("Detail", { code: item.code, name: item.name[lang] })}
+                >
+                  <View style={[s.flagCircle, { backgroundColor: theme.input }]}>
+                    <Text style={s.flag}>{item.flag}</Text>
+                  </View>
+                  <View style={s.info}>
+                    <Text style={[s.code, { color: theme.text }]}>{item.code}</Text>
+                    <Text style={[s.name, { color: theme.muted }]}>{item.name[lang]}</Text>
+                  </View>
+                  <Text style={[s.rate, { color: theme.primary }]}>
+                    {rates[item.code] ? `${rates[item.code].toFixed(4)} ${item.symbol || item.code}` : "—"}
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          />
+        )}
       </View>
 
       {/* Picker Modal */}
@@ -182,4 +225,6 @@ const s = StyleSheet.create({
   sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, height: "70%", marginTop: "auto" },
   pRow: { flexDirection: "row", alignItems: "center", paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "rgba(0,0,0,0.05)" },
   pFlag: { fontSize: 24 },
+  errorBox: { padding: 10, backgroundColor: '#FF000010', borderRadius: 10, marginBottom: 10, alignItems: 'center' },
+  emptyBox: { padding: 40, alignItems: 'center' },
 });
