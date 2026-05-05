@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -10,11 +11,12 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import Animated, { FadeInDown, Layout } from "react-native-reanimated";
 
 import { useApp } from "../context/AppContext";
 import { T } from "../i18n/translations";
 import { TabParamList } from "../navigation/AppNavigator";
-import Layout from "../components/Layout";
+import LayoutComponent from "../components/Layout";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -45,9 +47,20 @@ const CURRENCIES = [
   { code: "DKK", name: { fr: "Couronne danoise",     en: "Danish Krone" },       flag: "🇩🇰" },
 ];
 
-const FLAGS: Record<string, string> = Object.fromEntries(CURRENCIES.map((c) => [c.code, c.flag]));
-
 type Nav = BottomTabNavigationProp<TabParamList>;
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+const SkeletonItem = ({ theme }: { theme: any }) => (
+  <View style={[s.row, { backgroundColor: theme.card, opacity: 0.5 }]}>
+    <View style={[s.flagCircle, { backgroundColor: theme.input }]} />
+    <View style={s.info}>
+      <View style={{ height: 16, width: 60, backgroundColor: theme.input, borderRadius: 4 }} />
+      <View style={{ height: 12, width: 120, backgroundColor: theme.input, borderRadius: 4, marginTop: 6 }} />
+    </View>
+    <View style={{ height: 20, width: 80, backgroundColor: theme.input, borderRadius: 4 }} />
+  </View>
+);
 
 export default function ListScreen() {
   const { theme, lang, darkMode } = useApp();
@@ -57,27 +70,45 @@ export default function ListScreen() {
   const [base, setBase] = useState("EUR");
   const [rates, setRates] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRates = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`https://api.frankfurter.app/latest?from=${base}`);
+      if (!r.ok) throw new Error("API Error");
+      const data = await r.json();
+      setRates(data.rates || {});
+    } catch (e) {
+      setError(lang === "fr" ? "Erreur de connexion" : "Connection error");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [base, lang]);
 
   useEffect(() => {
-    setLoading(true);
-    fetch(`https://api.frankfurter.app/latest?from=${base}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setRates(data.rates || {});
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [base]);
+    fetchRates();
+  }, [fetchRates]);
 
-  const filtered = CURRENCIES.filter(
-    (c) =>
-      c.code !== base &&
-      (c.code.toLowerCase().includes(search.toLowerCase()) ||
-        c.name[lang].toLowerCase().includes(search.toLowerCase()))
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchRates(true);
+  };
+
+  const filtered = useMemo(() => 
+    CURRENCIES.filter(
+      (c) =>
+        c.code !== base &&
+        (c.code.toLowerCase().includes(search.toLowerCase()) ||
+          c.name[lang].toLowerCase().includes(search.toLowerCase()))
+    ), [base, search, lang]
   );
 
-  const ds = {
+  const ds = useMemo(() => ({
     card: {
       backgroundColor: theme.card,
       shadowColor: "#000",
@@ -89,72 +120,119 @@ export default function ListScreen() {
     text: { color: theme.text },
     muted: { color: theme.muted },
     input: { backgroundColor: theme.input },
+  }), [theme, darkMode]);
+
+  // ── List Header ─────────────────────────────────────────────────────────────
+  const renderHeader = () => (
+    <View style={s.headerContainer}>
+      <Text style={[s.title, ds.text]}>
+        {lang === "fr" ? "Cours du marché" : "Market Rates"}
+      </Text>
+      <Text style={[s.subtitle, ds.muted]}>
+        {lang === "fr" ? `Base : 1 ${base}` : `Base: 1 ${base}`}
+      </Text>
+
+      <TextInput
+        style={[s.search, ds.input, ds.text]}
+        placeholder={t.searchCurrency}
+        placeholderTextColor={theme.muted}
+        value={search}
+        onChangeText={setSearch}
+      />
+      
+      {error && (
+        <TouchableOpacity style={s.errorBox} onPress={() => fetchRates()}>
+          <Text style={s.errorText}>{error} - {lang === "fr" ? "Réessayer" : "Retry"}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  // ── List Empty ──────────────────────────────────────────────────────────────
+  const renderEmpty = () => {
+    if (loading) return null;
+    return (
+      <View style={s.emptyContainer}>
+        <Text style={[s.emptyText, ds.muted]}>
+          {lang === "fr" ? "Aucun résultat trouvé" : "No results found"}
+        </Text>
+      </View>
+    );
   };
 
   return (
-    <Layout>
+    <LayoutComponent>
       <View style={s.container}>
-        <Text style={[s.title, ds.text]}>
-          {lang === "fr" ? "Cours du marché" : "Market Rates"}
-        </Text>
-        <Text style={[s.subtitle, ds.muted]}>
-          {lang === "fr" ? `Base : 1 ${base}` : `Base: 1 ${base}`}
-        </Text>
-
-        <TextInput
-          style={[s.search, ds.input, ds.text]}
-          placeholder={t.searchCurrency}
-          placeholderTextColor={theme.muted}
-          value={search}
-          onChangeText={setSearch}
-        />
-
-        {loading ? (
-          <ActivityIndicator color={theme.primary} style={{ marginTop: 40 }} />
+        {loading && !refreshing ? (
+          <View style={s.skeletonList}>
+            {renderHeader()}
+            {[1, 2, 3, 4, 5, 6].map((i) => <SkeletonItem key={i} theme={theme} />)}
+          </View>
         ) : (
           <FlatList
             data={filtered}
             keyExtractor={(item) => item.code}
+            ListHeaderComponent={renderHeader}
+            ListEmptyComponent={renderEmpty}
             contentContainerStyle={s.listContent}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[s.row, ds.card]}
-                activeOpacity={0.7}
-                onPress={() =>
-                  navigation.getParent()?.navigate("Detail", {
-                    code: item.code,
-                    name: item.name[lang],
-                  })
-                }
+            refreshControl={
+              <RefreshControl 
+                refreshing={refreshing} 
+                onRefresh={onRefresh} 
+                tintColor={theme.primary} 
+                colors={[theme.primary]}
+              />
+            }
+            // Performance optimizations
+            windowSize={10}
+            maxToRenderPerBatch={10}
+            initialNumToRender={12}
+            removeClippedSubviews={true}
+            renderItem={({ item, index }) => (
+              <Animated.View 
+                entering={FadeInDown.delay(index * 50).duration(400)}
+                layout={Layout.springify()}
               >
-                <View style={[s.flagCircle, ds.input]}>
-                  <Text style={s.flag}>{item.flag}</Text>
-                </View>
-                <View style={s.info}>
-                  <Text style={[s.code, ds.text]}>{item.code}</Text>
-                  <Text style={[s.name, ds.muted]} numberOfLines={1}>
-                    {item.name[lang]}
-                  </Text>
-                </View>
-                <View style={s.rateBlock}>
-                  <Text style={[s.rate, { color: theme.primary }]}>
-                    {rates[item.code]?.toFixed(4) || "—"}
-                  </Text>
-                  <Text style={[s.chevron, ds.muted]}>›</Text>
-                </View>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.row, ds.card]}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    navigation.getParent()?.navigate("Detail", {
+                      code: item.code,
+                      name: item.name[lang],
+                    })
+                  }
+                >
+                  <View style={[s.flagCircle, ds.input]}>
+                    <Text style={s.flag}>{item.flag}</Text>
+                  </View>
+                  <View style={s.info}>
+                    <Text style={[s.code, ds.text]}>{item.code}</Text>
+                    <Text style={[s.name, ds.muted]} numberOfLines={1}>
+                      {item.name[lang]}
+                    </Text>
+                  </View>
+                  <View style={s.rateBlock}>
+                    <Text style={[s.rate, { color: theme.primary }]}>
+                      {rates[item.code]?.toFixed(4) || "—"}
+                    </Text>
+                    <Text style={[s.chevron, ds.muted]}>›</Text>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
             )}
           />
         )}
       </View>
-    </Layout>
+    </LayoutComponent>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 20 },
-  title: { fontSize: 28, fontWeight: "800", marginTop: 10 },
-  subtitle: { fontSize: 15, marginBottom: 20 },
+  container: { flex: 1 },
+  headerContainer: { paddingHorizontal: 20, paddingTop: 10 },
+  title: { fontSize: 28, fontWeight: "800" },
+  subtitle: { fontSize: 15, marginBottom: 20, marginTop: 4 },
   search: {
     borderRadius: 14,
     paddingHorizontal: 16,
@@ -169,6 +247,7 @@ const s = StyleSheet.create({
     padding: 14,
     borderRadius: 18,
     marginBottom: 10,
+    marginHorizontal: 20,
   },
   flagCircle: {
     width: 44,
@@ -184,4 +263,15 @@ const s = StyleSheet.create({
   rateBlock: { flexDirection: "row", alignItems: "center" },
   rate: { fontSize: 17, fontWeight: "700", marginRight: 8 },
   chevron: { fontSize: 20 },
+  skeletonList: { flex: 1 },
+  errorBox: {
+    backgroundColor: "#FF3B3015",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  errorText: { color: "#FF3B30", fontWeight: "600", fontSize: 14 },
+  emptyContainer: { alignItems: "center", marginTop: 40 },
+  emptyText: { fontSize: 15 },
 });
