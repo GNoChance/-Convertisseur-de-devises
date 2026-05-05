@@ -112,15 +112,19 @@ export default function ConverterScreen() {
     <Layout>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
         
+        {/* Vous envoyez */}
         <View style={[s.card, { backgroundColor: theme.card }]}>
           <Text style={[s.label, { color: theme.muted }]}>{t.youSend}</Text>
           <View style={s.row}>
-            <TextInput
-              style={[s.amount, { color: theme.text }]}
-              value={fromAmount}
-              onChangeText={setFromAmount}
-              keyboardType="decimal-pad"
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <TextInput
+                style={[s.amount, { color: theme.text }]}
+                value={fromAmount}
+                onChangeText={setFromAmount}
+                keyboardType="decimal-pad"
+              />
+              <Text style={[s.unit, { color: theme.muted }]}>{fromCurrency.code}</Text>
+            </View>
             <TouchableOpacity style={[s.pill, { backgroundColor: theme.input }]} onPress={() => { setPickerTarget("from"); setPickerVisible(true); }}>
               <Text style={{ color: theme.text }}>{fromCurrency.flag} {fromCurrency.code}</Text>
             </TouchableOpacity>
@@ -134,18 +138,23 @@ export default function ConverterScreen() {
           <Text style={{ color: "#FFF", fontSize: 20 }}>⇅</Text>
         </TouchableOpacity>
 
+        {/* Ils reçoivent */}
         <View style={[s.card, { backgroundColor: theme.card }]}>
           <Text style={[s.label, { color: theme.muted }]}>{t.theyGet}</Text>
           <View style={s.row}>
-            <Text style={[s.amount, { color: theme.primary }]}>
-              {loadingRate ? "..." : (numTo?.toFixed(2) || "—")}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <Text style={[s.amount, { color: theme.primary }]}>
+                {loadingRate ? "..." : (numTo?.toFixed(2) || "—")}
+              </Text>
+              <Text style={[s.unit, { color: theme.primary, marginLeft: 8 }]}>{toCurrency.code}</Text>
+            </View>
             <TouchableOpacity style={[s.pill, { backgroundColor: theme.input }]} onPress={() => { setPickerTarget("to"); setPickerVisible(true); }}>
               <Text style={{ color: theme.text }}>{toCurrency.flag} {toCurrency.code}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* Watchlist */}
         <Text style={[s.sectionTitle, { color: theme.muted }]}>{t.watchlistTitle}</Text>
         {watchlist.map(code => {
           const cur = CURRENCIES.find(c => c.code === code);
@@ -202,7 +211,8 @@ const s = StyleSheet.create({
   card: { borderRadius: 18, padding: 18, marginBottom: 10 },
   label: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", marginBottom: 10 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  amount: { fontSize: 28, fontWeight: "700", flex: 1 },
+  amount: { fontSize: 28, fontWeight: "700" },
+  unit: { fontSize: 18, fontWeight: "600", marginLeft: 6, marginTop: 4 },
   pill: { flexDirection: "row", alignItems: "center", padding: 8, borderRadius: 20 },
   swap: { alignSelf: "center", width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginVertical: 10 },
   sectionTitle: { fontSize: 12, fontWeight: "700", textTransform: "uppercase", marginTop: 20, marginBottom: 10 },
