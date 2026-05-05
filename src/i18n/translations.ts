@@ -89,6 +89,7 @@ export const T = {
     // Nav labels
     navHome:    "Accueil",
     navChart:   "Graphique",
+    navRates:   "Taux",
     navProfile: "Profil",
   },
   en: {
@@ -175,6 +176,7 @@ export const T = {
     // Nav labels
     navHome:    "Home",
     navChart:   "Chart",
+    navRates:   "Rates",
     navProfile: "Profile",
   },
 } as const;

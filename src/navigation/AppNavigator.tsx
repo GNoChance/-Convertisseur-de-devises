@@ -9,6 +9,7 @@ import GraphScreen       from "../screens/GraphScreen";
 import ProfileScreen     from "../screens/ProfileScreen";
 import DetailScreen      from "../screens/DetailScreen";
 import OnboardingScreen  from "../screens/OnboardingScreen";
+import ListScreen        from "../screens/ListScreen";
 import { useApp }        from "../context/AppContext";
 import { T }             from "../i18n/translations";
 
@@ -25,6 +26,7 @@ export type RootStackParamList = {
 export type TabParamList = {
   Converter: undefined;
   Graph:     undefined;
+  Rates:     undefined;
   Profile:   undefined;
 };
 
@@ -37,6 +39,7 @@ const BREAKPOINT = 768;
 const ICONS: Record<string, string> = {
   Converter: "💱",
   Graph:     "📈",
+  Rates:     "📊",
   Profile:   "👤",
 };
 
@@ -51,6 +54,7 @@ function SmartTabBar({ state, navigation }: BottomTabBarProps) {
   const labels: Record<string, string> = {
     Converter: t.navHome,
     Graph:     t.navChart,
+    Rates:     t.navRates,
     Profile:   t.navProfile,
   };
 
@@ -207,6 +211,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Converter" component={ConverterScreen} />
       <Tab.Screen name="Graph"     component={GraphScreen} />
+      <Tab.Screen name="Rates"     component={ListScreen} />
       <Tab.Screen name="Profile"   component={ProfileScreen} />
     </Tab.Navigator>
   );
